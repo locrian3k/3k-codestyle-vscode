@@ -1,0 +1,290 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "LPC",
+  "scopeName": "source.lpc.3k",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#preprocessor" },
+    { "include": "#inherit" },
+    { "include": "#strings" },
+    { "include": "#characters" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#modifiers" },
+    { "include": "#constants" },
+    { "include": "#operators" },
+    { "include": "#lpc-literals" },
+    { "include": "#function-definition" },
+    { "include": "#function-call" },
+    { "include": "#call-other" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.lpc",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.lpc",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "patterns": [
+            {
+              "name": "comment.block.lpc",
+              "match": "."
+            }
+          ]
+        }
+      ]
+    },
+    "preprocessor": {
+      "patterns": [
+        {
+          "name": "meta.preprocessor.pragma.lpc",
+          "match": "^\\s*#\\s*pragma\\b.*$",
+          "captures": {
+            "0": { "name": "keyword.control.directive.pragma.lpc" }
+          }
+        },
+        {
+          "name": "meta.preprocessor.include.lpc",
+          "match": "^\\s*#\\s*include\\s+([\"<].*[\">])",
+          "captures": {
+            "0": { "name": "keyword.control.directive.include.lpc" },
+            "1": { "name": "string.quoted.other.include.lpc" }
+          }
+        },
+        {
+          "name": "meta.preprocessor.define.lpc",
+          "match": "^\\s*#\\s*define\\s+(\\w+)",
+          "captures": {
+            "0": { "name": "keyword.control.directive.define.lpc" },
+            "1": { "name": "entity.name.constant.preprocessor.lpc" }
+          }
+        },
+        {
+          "name": "keyword.control.directive.lpc",
+          "match": "^\\s*#\\s*(ifdef|ifndef|if|else|elif|endif|undef|echo)\\b"
+        }
+      ]
+    },
+    "inherit": {
+      "patterns": [
+        {
+          "name": "meta.inherit.lpc",
+          "match": "\\binherit\\s+(\"[^\"]+\")",
+          "captures": {
+            "0": { "name": "keyword.other.inherit.lpc" },
+            "1": { "name": "string.quoted.double.inherit-path.lpc" }
+          }
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.lpc",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.lpc",
+              "match": "\\\\(x[0-9a-fA-F]{1,2}|u[0-9a-fA-F]{4}|[nrtbfav\\\\\"'0])"
+            },
+            {
+              "name": "constant.other.placeholder.lpc",
+              "match": "%(-?\\d*\\.?\\d*)(d|i|s|f|x|X|o|O|c|e|E|g|G|\\^|:)"
+            }
+          ]
+        },
+        {
+          "name": "string.unquoted.heredoc.lpc",
+          "begin": "@(@?)(\\w+)",
+          "end": "^\\2$",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.lpc" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.lpc" }
+          }
+        }
+      ]
+    },
+    "characters": {
+      "patterns": [
+        {
+          "name": "constant.character.lpc",
+          "match": "'(\\\\.|[^'])'"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.lpc",
+          "match": "\\b0[xX][0-9a-fA-F_]+\\b"
+        },
+        {
+          "name": "constant.numeric.octal.lpc",
+          "match": "\\b0[0-7_]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.lpc",
+          "match": "\\b\\d+\\.\\d*([eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.float.lpc",
+          "match": "\\b\\.\\d+([eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.lpc",
+          "match": "\\b\\d[\\d_]*\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.lpc",
+          "match": "\\b(if|else|for|while|foreach|do|switch|case|default|break|continue|return|catch)\\b"
+        },
+        {
+          "name": "keyword.other.lpc",
+          "match": "\\b(new|clone_object|destruct|this_object|this_player|this_interactive|previous_object|environment|sizeof|typeof|allocate|member|m_delete|m_indices|m_values|keys|values|filter|map|sort_array|call_other|call_out|remove_call_out|find_call_out|sscanf|sprintf|implode|explode|replace_string|regexp|write|say|tell_room|tell_object|shout|move_object|set_heart_beat|enable_commands|add_action|query_verb|living|interactive|clone_object|load_object|find_object|file_name|input_to|remove_input_to)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.lpc",
+          "match": "\\b(void|int|string|object|mapping|mixed|float|status|closure|symbol|function|class|struct)\\b"
+        }
+      ]
+    },
+    "modifiers": {
+      "patterns": [
+        {
+          "name": "storage.modifier.lpc",
+          "match": "\\b(static|private|public|protected|nosave|nomask|varargs|virtual)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.lpc",
+          "match": "\\b(null|nil|__FILE__|__LINE__|__DIR__|__HEART_BEAT_INTERVAL__)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.lpc",
+          "match": "(=|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=)"
+        },
+        {
+          "name": "keyword.operator.comparison.lpc",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.logical.lpc",
+          "match": "(&&|\\|\\||!)"
+        },
+        {
+          "name": "keyword.operator.bitwise.lpc",
+          "match": "(&|\\||\\^|~|<<|>>)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.lpc",
+          "match": "(\\+\\+|--|\\+|-|\\*|/|%)"
+        },
+        {
+          "name": "keyword.operator.ternary.lpc",
+          "match": "(\\?|:)"
+        },
+        {
+          "name": "keyword.operator.range.lpc",
+          "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.spread.lpc",
+          "match": "\\.\\.\\."
+        }
+      ]
+    },
+    "lpc-literals": {
+      "patterns": [
+        {
+          "name": "punctuation.definition.array.begin.lpc",
+          "match": "\\(\\{"
+        },
+        {
+          "name": "punctuation.definition.array.end.lpc",
+          "match": "\\}\\)"
+        },
+        {
+          "name": "punctuation.definition.mapping.begin.lpc",
+          "match": "\\(\\["
+        },
+        {
+          "name": "punctuation.definition.mapping.end.lpc",
+          "match": "\\]\\)"
+        },
+        {
+          "name": "punctuation.definition.closure.begin.lpc",
+          "match": "\\(:"
+        },
+        {
+          "name": "punctuation.definition.closure.end.lpc",
+          "match": ":\\)"
+        },
+        {
+          "name": "variable.other.closure-arg.lpc",
+          "match": "\\$\\d+"
+        },
+        {
+          "name": "constant.other.efun-closure.lpc",
+          "match": "#'\\w+"
+        }
+      ]
+    },
+    "function-definition": {
+      "patterns": [
+        {
+          "name": "meta.function.lpc",
+          "match": "\\b(?:(?:static|private|public|protected|nosave|nomask|varargs|virtual)\\s+)*(?:void|int|string|object|mapping|mixed|float|status|closure|symbol)\\s+\\*?\\s*(\\w+)\\s*(?=\\()",
+          "captures": {
+            "1": { "name": "entity.name.function.lpc" }
+          }
+        }
+      ]
+    },
+    "function-call": {
+      "patterns": [
+        {
+          "name": "meta.function-call.lpc",
+          "match": "\\b(\\w+)\\s*(?=\\()",
+          "captures": {
+            "1": { "name": "entity.name.function.call.lpc" }
+          }
+        }
+      ]
+    },
+    "call-other": {
+      "patterns": [
+        {
+          "name": "keyword.operator.call-other.lpc",
+          "match": "->"
+        },
+        {
+          "name": "keyword.operator.scope.lpc",
+          "match": "::"
+        }
+      ]
+    }
+  }
+}

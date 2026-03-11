@@ -1,0 +1,144 @@
+{
+  "name": "3k-codestyle",
+  "displayName": "3K Codestyle for LPC",
+  "description": "Linter and formatter enforcing 3Kingdoms MUD LPC codestyle conventions",
+  "version": "0.1.15",
+  "publisher": "Mimic",
+  "author": {
+    "name": "Mimic"
+  },
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/locrian3k/3k-codestyle-vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/locrian3k/3k-codestyle-vscode/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Formatters",
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:lpc"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "lpc",
+        "aliases": ["LPC", "lpc"],
+        "extensions": [".c", ".h"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lpc",
+        "scopeName": "source.lpc.3k",
+        "path": "./syntaxes/lpc.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "3K Codestyle",
+      "properties": {
+        "3k-codestyle.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable the 3K codestyle linter and formatter."
+        },
+        "3k-codestyle.lint.pragmaStrongTypes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require #pragma strong_types as the first line of .c files."
+        },
+        "3k-codestyle.lint.includeDefsH": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require #include \"defs.h\" (or variant) in every file."
+        },
+        "3k-codestyle.lint.noTabs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Flag tab characters (spaces only)."
+        },
+        "3k-codestyle.lint.indentation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require 2-space indentation."
+        },
+        "3k-codestyle.lint.lineLength": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn on lines exceeding the maximum length."
+        },
+        "3k-codestyle.lint.lineLengthMax": {
+          "type": "number",
+          "default": 80,
+          "description": "Maximum line length before warning."
+        },
+        "3k-codestyle.lint.allmanBrackets": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require Allman-style braces (opening brace on its own line)."
+        },
+        "3k-codestyle.lint.voidReturn": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require explicit return; at end of void functions."
+        },
+        "3k-codestyle.lint.statusType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Suggest using status type instead of int for boolean functions."
+        },
+        "3k-codestyle.lint.singleStatementBrackets": {
+          "type": "boolean",
+          "default": true,
+          "description": "Flag unnecessary brackets on single-statement if/else."
+        },
+        "3k-codestyle.lint.superCreate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn if create(), init(), or reset() do not call their parent (::) version in .c files."
+        },
+        "3k-codestyle.lint.unwrappedString": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn when output functions (write, tell_object, ansi_write, etc.) have long strings not wrapped in WRAP(), WWRAP(), or word_wrap()."
+        },
+        "3k-codestyle.lint.fileStructureOrder": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hint when file sections are out of order: pragma, includes, defines, inherit, globals/prototypes, one-liners, create(), init(), reset(), other functions."
+        },
+        "3k-codestyle.lint.forwardReference": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn when a function is called before it is defined and has no forward prototype declaration."
+        },
+        "3k-codestyle.format.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the 3K codestyle document formatter."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}

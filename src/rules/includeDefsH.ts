@@ -1,0 +1,37 @@
+import * as vscode from "vscode";
+import { LpcContext } from "../lpcParser";
+import { Config } from "../config";
+
+/**
+ * Rule: Every file must have an #include that ends with defs.h
+ * (e.g., "defs.h", "../defs.h", "../../defs.h")
+ */
+export function includeDefsH(
+  document: vscode.TextDocument,
+  contexts: LpcContext,
+  _config: Config
+): vscode.Diagnostic[] {
+  // Skip if this file IS a defs.h
+  if (document.fileName.endsWith("defs.h")) {
+    return [];
+  }
+
+  for (const ctx of contexts.lines) {
+    if (ctx.isPreprocessor) {
+      const trimmed = ctx.text.trim();
+      // Match #include "...defs.h" or #include <...defs.h>
+      if (/^#\s*include\s+["<].*defs\.h[">]/.test(trimmed)) {
+        return []; // found it
+      }
+    }
+  }
+
+  // Not found — emit warning at top of file
+  return [
+    new vscode.Diagnostic(
+      new vscode.Range(0, 0, 0, 0),
+      'Missing #include "defs.h" (or variant like "../defs.h").',
+      vscode.DiagnosticSeverity.Warning
+    ),
+  ];
+}
