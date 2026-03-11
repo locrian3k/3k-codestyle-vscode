@@ -109,7 +109,7 @@
         "3k-codestyle.lint.unwrappedString": {
           "type": "boolean",
           "default": true,
-          "description": "Warn when output functions (write, tell_object, ansi_write, etc.) have long strings not wrapped in WRAP(), WWRAP(), or word_wrap()."
+          "description": "Warn when output functions (write, tell_object, ansi_write, etc.) have long strings not wrapped in word_wrap(). Context-aware: skips create()/reset(), distinguishes single-target vs multi-target functions."
         },
         "3k-codestyle.lint.fileStructureOrder": {
           "type": "boolean",
