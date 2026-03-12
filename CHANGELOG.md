@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.18 — 2026-03-12
+
+### Bug Fixes
+- Fixed `collapseShortArrays` mangling multi-argument function calls like `add_item(({...}), second_arg)` — the transform now correctly leaves the array as an in-place collapsed argument instead of absorbing the parent function call line when the array is followed by a comma (indicating more arguments)
+
 ## 0.1.17 — 2026-03-11
 
 ### Formatter

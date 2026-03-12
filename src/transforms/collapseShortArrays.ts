@@ -225,8 +225,18 @@ function tryCollapse(
   let prefix = lines[openLine].substring(0, openIdx);
   let absorbedPrevLine = false;
 
-  // If ({ is alone on its line (prefix is whitespace), look at previous line
-  if (prefix.trim().length === 0 && resultSoFar.length > 0) {
+  // Get suffix: text after }) on the closing line
+  // (must check suffix BEFORE deciding whether to absorb previous line)
+  const suffix = lines[closeLine].substring(closeIdx + 2);
+
+  // If ({ is alone on its line (prefix is whitespace), look at previous line.
+  // BUT don't absorb if the suffix starts with "," — that means this array
+  // is just one argument in a larger multi-line call (e.g., add_item(({...}),
+  // second_arg)) and collapsing would disrupt the call structure.
+  const suffixTrimmed = suffix.trimStart();
+  const suffixIsComma = suffixTrimmed.startsWith(",");
+
+  if (prefix.trim().length === 0 && resultSoFar.length > 0 && !suffixIsComma) {
     const prevLine = resultSoFar[resultSoFar.length - 1];
     const prevTrimmed = prevLine.trimEnd();
     // Absorb if previous line ends with ( or , (continuation)
@@ -235,9 +245,6 @@ function tryCollapse(
       absorbedPrevLine = true;
     }
   }
-
-  // Get suffix: text after }) on the closing line
-  const suffix = lines[closeLine].substring(closeIdx + 2);
 
   // Collect element lines (between opening and closing)
   const elementLines: string[] = [];
