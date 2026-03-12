@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.16 — 2026-03-11
+
+### Quick Fixes
+- New quick-fix for `line-length` warnings: suggests where to break long lines (7th code action)
+- Priority-based strategy: break after assignment `=`, after `return`, before binary operators, or after commas
+- Operator breaks prefer lowest precedence first (`||` → `&&` → `+`/`-` → `*`/`/`)
+- Context-aware: detects `if`/`while`/`for` conditions and finds operators at the correct paren depth
+- Only offers a fix when both resulting lines fit under 80 characters
+
 ## 0.1.15 — 2026-03-11
 
 ### Linter

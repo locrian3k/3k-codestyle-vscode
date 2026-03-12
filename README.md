@@ -57,6 +57,7 @@ Click the lightbulb or press `Ctrl+.` on a diagnostic to apply:
 4. **Add missing `return;`** — Insert before closing brace of void function
 5. **Move brace to new line** — Convert K&R to Allman style
 6. **Wrap string in `word_wrap()`** — Wrap long string argument for single-target output functions
+7. **Break long line** — Suggest where to split lines over 80 characters (assignments, returns, operators, commas)
 
 ### Syntax Highlighting
 

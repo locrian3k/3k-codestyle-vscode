@@ -1,5 +1,10 @@
 import * as vscode from "vscode";
 
+interface BreakResult {
+  label: string;
+  replacement: string;
+}
+
 export class LpcCodeActionProvider implements vscode.CodeActionProvider {
   static readonly providedCodeActionKinds = [
     vscode.CodeActionKind.QuickFix,
@@ -37,6 +42,15 @@ export class LpcCodeActionProvider implements vscode.CodeActionProvider {
         case "unwrapped-string":
           actions.push(this.createWordWrapAction(document, diagnostic));
           break;
+        case "line-length": {
+          const breakAction = this.createLineLengthBreakAction(
+            document, diagnostic
+          );
+          if (breakAction) {
+            actions.push(breakAction);
+          }
+          break;
+        }
       }
     }
 
@@ -313,5 +327,348 @@ export class LpcCodeActionProvider implements vscode.CodeActionProvider {
     }
 
     return null;
+  }
+
+  // ==========================================================================
+  // Line-length quick-fix: suggest where to break long lines
+  // ==========================================================================
+
+  /**
+   * Try to break a long line at a sensible point. Strategies tried in order:
+   * 1. After assignment operator (=, +=, -=, etc.)
+   * 2. After return keyword
+   * 3. Before a binary operator (lowest precedence first)
+   * 4. After a comma (function arguments)
+   */
+  private createLineLengthBreakAction(
+    document: vscode.TextDocument,
+    diagnostic: vscode.Diagnostic
+  ): vscode.CodeAction | null {
+    const lineNum = diagnostic.range.start.line;
+    const line = document.lineAt(lineNum).text;
+    const maxLen = diagnostic.range.start.character;
+
+    // Skip preprocessor directives, comments
+    const trimmed = line.trim();
+    if (trimmed.startsWith("#")
+      || trimmed.startsWith("//")
+      || trimmed.startsWith("/*"))
+    {
+      return null;
+    }
+
+    const baseIndent = line.match(/^(\s*)/)?.[1] ?? "";
+    const contIndent = baseIndent + "  ";
+
+    const breakResult =
+      this.tryBreakAfterAssignment(line, contIndent, maxLen)
+      ?? this.tryBreakAfterReturn(line, contIndent, maxLen)
+      ?? this.tryBreakAtOperator(line, contIndent, maxLen)
+      ?? this.tryBreakAtComma(line, contIndent, maxLen);
+
+    if (!breakResult) {
+      return null;
+    }
+
+    const action = new vscode.CodeAction(
+      breakResult.label,
+      vscode.CodeActionKind.QuickFix
+    );
+    action.edit = new vscode.WorkspaceEdit();
+    action.edit.replace(
+      document.uri,
+      document.lineAt(lineNum).range,
+      breakResult.replacement
+    );
+    action.diagnostics = [diagnostic];
+    action.isPreferred = true;
+    return action;
+  }
+
+  // --- Strategy 1: Break after assignment operator ---
+
+  private tryBreakAfterAssignment(
+    line: string,
+    contIndent: string,
+    maxLen: number
+  ): BreakResult | null {
+    const assignIdx = this.findAssignmentOperator(line);
+    if (assignIdx === null) { return null; }
+
+    // Break after the '=' — skip trailing spaces
+    let opEnd = assignIdx + 1;
+    while (opEnd < line.length && line[opEnd] === " ") { opEnd++; }
+
+    const firstLine = line.substring(0, opEnd).trimEnd();
+    const secondLine = contIndent + line.substring(opEnd).trimStart();
+
+    if (secondLine.length > maxLen) { return null; }
+
+    return {
+      label: "Break line after assignment",
+      replacement: firstLine + "\n" + secondLine,
+    };
+  }
+
+  /**
+   * Find the position of an assignment '=' at paren depth 0.
+   * Recognizes =, +=, -=, *=, /=, %=.
+   * Skips ==, !=, <=, >=.
+   */
+  private findAssignmentOperator(line: string): number | null {
+    let inStr = false;
+    let parenDepth = 0;
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      const prev = i > 0 ? line[i - 1] : "";
+      const next = i + 1 < line.length ? line[i + 1] : "";
+
+      if (inStr) {
+        if (ch === "\\") { i++; continue; }
+        if (ch === "\"") { inStr = false; }
+        continue;
+      }
+      if (ch === "\"") { inStr = true; continue; }
+      if (ch === "/" && next === "/") { break; }
+      if (ch === "/" && next === "*") { break; }
+
+      if (ch === "(") { parenDepth++; continue; }
+      if (ch === ")") { parenDepth--; continue; }
+
+      if (ch === "=" && parenDepth === 0) {
+        if (next === "=") { i++; continue; } // ==
+        if (prev === "!" || prev === "<" || prev === ">") { continue; }
+        return i;
+      }
+    }
+    return null;
+  }
+
+  // --- Strategy 2: Break after return keyword ---
+
+  private tryBreakAfterReturn(
+    line: string,
+    contIndent: string,
+    maxLen: number
+  ): BreakResult | null {
+    const trimmed = line.trimStart();
+    if (!trimmed.startsWith("return ")) { return null; }
+
+    const returnIdx = line.indexOf("return ");
+    const breakPos = returnIdx + 7;
+
+    const firstLine = line.substring(0, breakPos).trimEnd();
+    const secondLine = contIndent + line.substring(breakPos).trimStart();
+
+    if (secondLine.length > maxLen) { return null; }
+
+    return {
+      label: "Break line after return",
+      replacement: firstLine + "\n" + secondLine,
+    };
+  }
+
+  // --- Strategy 3: Break before binary operator ---
+
+  private tryBreakAtOperator(
+    line: string,
+    contIndent: string,
+    maxLen: number
+  ): BreakResult | null {
+    const candidates = this.findOperatorBreakPoints(line);
+    if (candidates.length === 0) { return null; }
+
+    // Sort by precedence ascending (lowest = best break), then position
+    candidates.sort((a, b) => a.precedence - b.precedence || a.pos - b.pos);
+
+    for (const candidate of candidates) {
+      const firstLine = line.substring(0, candidate.pos).trimEnd();
+      const secondLine = contIndent
+        + line.substring(candidate.pos).trimStart();
+
+      if (firstLine.length <= maxLen && secondLine.length <= maxLen) {
+        return {
+          label: "Break line before operator",
+          replacement: firstLine + "\n" + secondLine,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Find binary operators that could serve as break points.
+   * Determines the "base" paren depth of the expression:
+   *   - if/while/for/switch: depth 1 (expression inside parens)
+   *   - assignments/return/other: depth 0
+   * Only considers operators at that base depth.
+   *
+   * Precedence (lower = break here first):
+   *   1: ||  2: &&  3: |  4: ^  5: &  6: +/-  7: * / %
+   */
+  private findOperatorBreakPoints(
+    line: string
+  ): { pos: number; precedence: number }[] {
+    const candidates: { pos: number; precedence: number }[] = [];
+    let inStr = false;
+    let parenDepth = 0;
+    const codeStart = line.search(/\S/);
+
+    // Determine base depth: control-flow keywords wrap expression
+    // in parens, so operators are at depth 1
+    const trimmed = line.trim();
+    const baseDepth = /^(if|else\s+if|while|for|switch)\s*\(/.test(trimmed)
+      ? 1 : 0;
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      const next = i + 1 < line.length ? line[i + 1] : "";
+      const prev = i > 0 ? line[i - 1] : "";
+
+      if (inStr) {
+        if (ch === "\\") { i++; continue; }
+        if (ch === "\"") { inStr = false; }
+        continue;
+      }
+      if (ch === "\"") { inStr = true; continue; }
+      if (ch === "/" && next === "/") { break; }
+      if (ch === "/" && next === "*") { break; }
+
+      // Skip char literals
+      if (ch === "'" && !inStr) {
+        const close = line.indexOf("'", i + 1);
+        if (close > i) { i = close; continue; }
+      }
+
+      if (ch === "(") { parenDepth++; continue; }
+      if (ch === ")") { parenDepth--; continue; }
+      if (parenDepth !== baseDepth) { continue; }
+
+      // Skip leading indent
+      if (i <= codeStart) { continue; }
+
+      // Skip -> arrow (not subtraction)
+      if (ch === "-" && next === ">") { i++; continue; }
+
+      // || logical or
+      if (ch === "|" && next === "|") {
+        candidates.push({ pos: i, precedence: 1 });
+        i++; continue;
+      }
+      // && logical and
+      if (ch === "&" && next === "&") {
+        candidates.push({ pos: i, precedence: 2 });
+        i++; continue;
+      }
+      // | bitwise or (not ||)
+      if (ch === "|" && next !== "|" && prev !== "|") {
+        candidates.push({ pos: i, precedence: 3 });
+        continue;
+      }
+      // ^ bitwise xor
+      if (ch === "^") {
+        candidates.push({ pos: i, precedence: 4 });
+        continue;
+      }
+      // & bitwise and (not &&)
+      if (ch === "&" && next !== "&" && prev !== "&") {
+        candidates.push({ pos: i, precedence: 5 });
+        continue;
+      }
+      // Find preceding non-space character for binary vs unary check
+      let prevNS = "";
+      for (let j = i - 1; j >= 0; j--) {
+        if (line[j] !== " " && line[j] !== "\t") {
+          prevNS = line[j]; break;
+        }
+      }
+
+      // + - binary (not unary, not +=/-=, not ->)
+      if ((ch === "+" || ch === "-") && next !== "=") {
+        if (/[\w)\]]/.test(prevNS)) {
+          candidates.push({ pos: i, precedence: 6 });
+          continue;
+        }
+      }
+      // * / % (not *=, /=, %=, not /*, not ->)
+      if ((ch === "*" || ch === "/" || ch === "%") && next !== "=") {
+        if (ch === "/" && next === "*") { continue; }
+        if (ch === "*" && prev === "/") { continue; }
+        if (/[\w)\]]/.test(prevNS)) {
+          candidates.push({ pos: i, precedence: 7 });
+          continue;
+        }
+      }
+    }
+
+    return candidates;
+  }
+
+  // --- Strategy 4: Break after comma ---
+
+  private tryBreakAtComma(
+    line: string,
+    contIndent: string,
+    maxLen: number
+  ): BreakResult | null {
+    const commaPositions = this.findCommaBreakPoints(line);
+    if (commaPositions.length === 0) { return null; }
+
+    // Try rightmost comma first (balances line lengths better)
+    for (let ci = commaPositions.length - 1; ci >= 0; ci--) {
+      const pos = commaPositions[ci];
+      const firstLine = line.substring(0, pos + 1).trimEnd();
+      const secondLine = contIndent + line.substring(pos + 1).trimStart();
+
+      if (firstLine.length <= maxLen && secondLine.length <= maxLen) {
+        return {
+          label: "Break line after comma",
+          replacement: firstLine + "\n" + secondLine,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Find commas at paren depth 1 (function arguments) that could
+   * serve as line break points.
+   */
+  private findCommaBreakPoints(line: string): number[] {
+    const positions: number[] = [];
+    let inStr = false;
+    let parenDepth = 0;
+
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      const next = i + 1 < line.length ? line[i + 1] : "";
+
+      if (inStr) {
+        if (ch === "\\") { i++; continue; }
+        if (ch === "\"") { inStr = false; }
+        continue;
+      }
+      if (ch === "\"") { inStr = true; continue; }
+      if (ch === "/" && next === "/") { break; }
+      if (ch === "/" && next === "*") { break; }
+
+      // Skip char literals
+      if (ch === "'" && !inStr) {
+        const close = line.indexOf("'", i + 1);
+        if (close > i) { i = close; continue; }
+      }
+
+      if (ch === "(") { parenDepth++; continue; }
+      if (ch === ")") { parenDepth--; continue; }
+
+      if (ch === "," && parenDepth === 1) {
+        positions.push(i);
+      }
+    }
+
+    return positions;
   }
 }

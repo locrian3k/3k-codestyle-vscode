@@ -2,7 +2,7 @@
   "name": "3k-codestyle",
   "displayName": "3K Codestyle for LPC",
   "description": "Linter and formatter enforcing 3Kingdoms MUD LPC codestyle conventions",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "publisher": "Mimic",
   "author": {
     "name": "Mimic"
