@@ -93,14 +93,17 @@ All settings are under the `3k-codestyle` prefix. Access via `File > Preferences
 
 ## Installation
 
-### From VSIX file
+### From GitHub Release (recommended)
 
-1. Download the latest `.vsix` file
-2. In VS Code: `Extensions` sidebar > `...` menu > `Install from VSIX...`
-3. Select the `.vsix` file
-4. Reload VS Code
+1. Go to [Releases](https://github.com/locrian3k/3k-codestyle-vscode/releases)
+2. Download the `.vsix` file from the latest release
+3. In VS Code: `Extensions` sidebar > `...` menu > `Install from VSIX...`
+4. Select the downloaded `.vsix` file
+5. Reload VS Code
 
 ### From source
+
+Requires [Node.js](https://nodejs.org/) installed.
 
 ```bash
 git clone https://github.com/locrian3k/3k-codestyle-vscode.git
