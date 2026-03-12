@@ -273,19 +273,74 @@ function tryCollapse(
   const collapsed = prefix + "({" + elements.join(", ") + "})" +
     suffix.trimStart();
 
-  // Check if it fits
-  if (collapsed.length > 80) { return null; }
-
-  // Success — determine how many lines to replace
+  // Determine how many lines to replace
   const linesConsumed = closeLine - openLine + 1;
 
+  // Check if it fits on a single line
+  if (collapsed.length <= 80) {
+    if (absorbedPrevLine) {
+      resultSoFar.pop();
+    }
+    return {
+      outputLines: [collapsed],
+      replacedLines: linesConsumed,
+    };
+  }
+
+  // --- Reflow: group elements onto fewer lines under 80 chars ---
+  // Determine indent for element lines (base indent + 2)
+  const prefixIndent = prefix.match(/^(\s*)/)?.[1] ?? "";
+  const elemIndent = prefixIndent + "  ";
+  const closeIndent = prefixIndent;
+
+  // Build grouped element lines
+  const groupedLines: string[] = [];
+  let currentLine = elemIndent;
+
+  for (let ei = 0; ei < elements.length; ei++) {
+    const elem = elements[ei];
+    const separator = ei < elements.length - 1 ? ", " : ",";
+    const candidate = currentLine + elem + separator;
+
+    if (currentLine === elemIndent) {
+      // First element on this line — always add it
+      currentLine = candidate;
+    }
+    else if (candidate.length <= 80) {
+      // Fits on current line
+      currentLine = candidate;
+    }
+    else {
+      // Doesn't fit — flush current line and start a new one
+      groupedLines.push(currentLine);
+      currentLine = elemIndent + elem + separator;
+    }
+  }
+  if (currentLine.trim().length > 0) {
+    groupedLines.push(currentLine);
+  }
+
+  // Only reflow if we actually reduced the line count
+  if (groupedLines.length >= elements.length) { return null; }
+
+  // Build the output: prefix with ({, grouped elements, close with })
+  const openLineText = prefix.trimEnd().length > 0
+    ? prefix.trimEnd() + "({"
+    : prefixIndent + "({";
+  const closeLineText = closeIndent + "})" + suffix.trimStart();
+
+  const outputLines: string[] = [openLineText];
+  for (const gl of groupedLines) {
+    outputLines.push(gl);
+  }
+  outputLines.push(closeLineText);
+
   if (absorbedPrevLine) {
-    // Remove the previous line from resultSoFar (we're replacing it)
     resultSoFar.pop();
   }
 
   return {
-    outputLines: [collapsed],
+    outputLines,
     replacedLines: linesConsumed,
   };
 }

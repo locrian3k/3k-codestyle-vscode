@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.17 — 2026-03-11
+
+### Formatter
+- Enhanced `collapseShortArrays`: when a multi-line array can't fit on one line, it now **reflows** elements onto grouped lines that stay under 80 characters, instead of leaving them one-per-line
+- Example: 10 elements listed on 10 lines → grouped onto 1–2 lines within the 80-char limit
+
 ## 0.1.16 — 2026-03-11
 
 ### Quick Fixes
