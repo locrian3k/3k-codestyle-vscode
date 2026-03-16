@@ -14,10 +14,19 @@ import { Config } from "../config";
  * Only applies to .c files (not .h headers).
  */
 
-const LIFECYCLE_FUNCTIONS: { name: string; reason: string }[] = [
-  { name: "create", reason: "initialize inherited properties" },
-  { name: "init", reason: "register inherited actions and commands" },
-  { name: "reset", reason: "run inherited reset behavior" },
+const LIFECYCLE_FUNCTIONS: {
+  name: string;
+  reason: string;
+  severity: vscode.DiagnosticSeverity;
+}[] = [
+  { name: "create", reason: "initialize inherited properties",
+    severity: vscode.DiagnosticSeverity.Warning },
+  { name: "init", reason: "register inherited actions and commands",
+    severity: vscode.DiagnosticSeverity.Warning },
+  // reset() is a Hint because many parent classes don't define it —
+  // the linter can't trace the inheritance chain to verify.
+  { name: "reset", reason: "run inherited reset behavior",
+    severity: vscode.DiagnosticSeverity.Hint },
 ];
 
 export function superCreate(
@@ -31,6 +40,15 @@ export function superCreate(
   }
 
   const diagnostics: vscode.Diagnostic[] = [];
+
+  // Extract inherit paths for actionable hint messages
+  const inherits: string[] = [];
+  for (let i = 0; i < document.lineCount; i++) {
+    const match = document.lineAt(i).text.trim().match(/^inherit\s+(.+?)\s*;$/);
+    if (match) {
+      inherits.push(match[1].trim());
+    }
+  }
 
   for (const lf of LIFECYCLE_FUNCTIONS) {
     const func = contexts.functions.find(f => f.name === lf.name);
@@ -50,11 +68,23 @@ export function superCreate(
 
     if (!found) {
       const sigLine = func.signatureLine;
+      let message = lf.name + "() should call ::" + lf.name
+        + "() to " + lf.reason + ".";
+
+      // For hints, tell the user which parent to check
+      if (lf.severity === vscode.DiagnosticSeverity.Hint
+        && inherits.length > 0)
+      {
+        message = lf.name + "() should call ::" + lf.name
+          + "() if " + inherits.join(", ") + " defines "
+          + lf.name + "().";
+      }
+
       diagnostics.push(
         new vscode.Diagnostic(
           new vscode.Range(sigLine, 0, sigLine, document.lineAt(sigLine).text.length),
-          lf.name + "() should call ::" + lf.name + "() to " + lf.reason + ".",
-          vscode.DiagnosticSeverity.Warning
+          message,
+          lf.severity
         )
       );
     }

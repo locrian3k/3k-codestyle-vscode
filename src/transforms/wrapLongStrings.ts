@@ -7,11 +7,16 @@
  * Into:
  *   write(WRAP(
  *     "Very long string that exceeds "
- *     "80 chars...\n"
- *   ));
+ *     "80 chars...\n"));
  *
- * Only wraps strings that are function call arguments (preceded by ( or ,)
- * and where the suffix is just closing parens/semicolons.
+ * Also handles strings followed by more arguments:
+ *   create_verbal(, name, "Very long message string", "write", "yells", ),
+ * Into:
+ *   create_verbal(, name,
+ *     "Very long message "
+ *     "string", "write", "yells", ),
+ *
+ * Only wraps strings that are function call arguments (preceded by ( or ,).
  * Splits at word boundaries. Respects escape sequences.
  */
 export function wrapLongStrings(text: string): string {
@@ -64,9 +69,6 @@ function tryWrapLine(line: string): string[] | null {
     const beforeChar = prefix.trimEnd().slice(-1);
     if (beforeChar !== "(" && beforeChar !== ",") { continue; }
 
-    // Only wrap if suffix is just closing parens/semicolons
-    if (!/^[)\s;]*$/.test(suffix.trim())) { continue; }
-
     const originalIndent = line.match(/^(\s*)/)?.[1] ?? "";
     const wrapIndent = originalIndent + "  ";
     const maxChunkLen = 80 - wrapIndent.length - 2; // 2 for quotes
@@ -74,17 +76,55 @@ function tryWrapLine(line: string): string[] | null {
     if (maxChunkLen < 20) { continue; }
     if (str.content.length <= maxChunkLen) { continue; }
 
+    // Calculate max content length for the last chunk (must fit suffix)
+    const suffixTrimmed = suffix.trimStart();
+    const lastMaxContent = maxChunkLen - suffixTrimmed.length;
+    if (lastMaxContent < 10) { continue; }
+
     const chunks = splitStringAtWords(str.content, maxChunkLen);
     if (chunks.length < 2) { continue; }
 
+    // If last chunk is too long to fit with suffix, re-split it
+    if (chunks[chunks.length - 1].length > lastMaxContent) {
+      const last = chunks.pop()!;
+      let splitAt = -1;
+      for (let i = Math.min(lastMaxContent, last.length - 1); i > 0; i--) {
+        if (last[i] === " ") {
+          splitAt = i + 1;
+          break;
+        }
+      }
+      if (splitAt <= 0) {
+        chunks.push(last);
+        continue; // Can't split to fit suffix
+      }
+      // Avoid splitting escape sequences
+      if (last[splitAt - 1] === "\\") { splitAt--; }
+      if (splitAt <= 0) {
+        chunks.push(last);
+        continue;
+      }
+      chunks.push(last.substring(0, splitAt));
+      chunks.push(last.substring(splitAt));
+    }
+
+    // Verify last chunk fits with suffix
+    if (chunks[chunks.length - 1].length > lastMaxContent) { continue; }
+
     const resultLines: string[] = [];
     resultLines.push(prefix.trimEnd());
-    for (const chunk of chunks) {
-      resultLines.push(wrapIndent + "\"" + chunk + "\"");
+    for (let i = 0; i < chunks.length - 1; i++) {
+      resultLines.push(wrapIndent + "\"" + chunks[i] + "\"");
     }
-    resultLines.push(originalIndent + suffix.trim());
+    // Append suffix to last chunk line
+    const lastLine = wrapIndent + "\"" + chunks[chunks.length - 1]
+      + "\"" + suffix;
+    resultLines.push(lastLine.trimEnd());
 
-    return resultLines;
+    // Verify all lines fit under 80
+    if (resultLines.every(l => l.length <= 80)) {
+      return resultLines;
+    }
   }
 
   return null;
@@ -147,9 +187,11 @@ function splitStringAtWords(content: string, maxLen: number): string[] {
       break;
     }
 
-    // Find the last space within maxLen characters from pos
+    // Find the last space within maxLen characters from pos.
+    // Start at maxLen - 1 because splitAt = i + 1 (includes the space),
+    // so the chunk length is splitAt - pos which must be <= maxLen.
     let splitAt = -1;
-    for (let i = pos + maxLen; i > pos; i--) {
+    for (let i = pos + maxLen - 1; i > pos; i--) {
       if (content[i] === " ") {
         splitAt = i + 1; // Include the space in this chunk
         break;

@@ -14,6 +14,16 @@ import { superCreate } from "./superCreate";
 import { unwrappedString } from "./unwrappedString";
 import { fileStructureOrder } from "./fileStructureOrder";
 import { forwardReference } from "./forwardReference";
+import { defineUppercase } from "./defineUppercase";
+import { staticDeprecated } from "./staticDeprecated";
+import { fileHeaderComment } from "./fileHeaderComment";
+import { filenameConventions } from "./filenameConventions";
+import { mixedType } from "./mixedType";
+import { sprintfPreference } from "./sprintfPreference";
+import { defineParenthesized } from "./defineParenthesized";
+import { privateVariables } from "./privateVariables";
+import { floatCriticalData } from "./floatCriticalData";
+import { bracesAroundMacro } from "./bracesAroundMacro";
 
 export type LintRule = (
   document: vscode.TextDocument,
@@ -41,4 +51,14 @@ export const allRules: RuleEntry[] = [
   { id: "unwrapped-string", settingKey: "unwrappedString", rule: unwrappedString },
   { id: "file-structure-order", settingKey: "fileStructureOrder", rule: fileStructureOrder },
   { id: "forward-reference", settingKey: "forwardReference", rule: forwardReference },
+  { id: "define-uppercase", settingKey: "defineUppercase", rule: defineUppercase },
+  { id: "static-deprecated", settingKey: "staticDeprecated", rule: staticDeprecated },
+  { id: "file-header-comment", settingKey: "fileHeaderComment", rule: fileHeaderComment },
+  { id: "filename-conventions", settingKey: "filenameConventions", rule: filenameConventions },
+  { id: "mixed-type", settingKey: "mixedType", rule: mixedType },
+  { id: "sprintf-preference", settingKey: "sprintfPreference", rule: sprintfPreference },
+  { id: "define-parenthesized", settingKey: "defineParenthesized", rule: defineParenthesized },
+  { id: "private-variables", settingKey: "privateVariables", rule: privateVariables },
+  { id: "float-critical-data", settingKey: "floatCriticalData", rule: floatCriticalData },
+  { id: "braces-around-macro", settingKey: "bracesAroundMacro", rule: bracesAroundMacro },
 ];

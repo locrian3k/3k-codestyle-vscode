@@ -49,13 +49,16 @@ export function fileStructureOrder(
   const diagnostics: vscode.Diagnostic[] = [];
 
   // Map function signature lines to their info
-  const funcAtLine = new Map<number, { name: string; isOneLiner: boolean }>();
+  const funcAtLine = new Map<number, {
+    name: string; isOneLiner: boolean; returnType: string;
+  }>();
   const insideFunction = new Set<number>();
 
   for (const func of contexts.functions) {
     funcAtLine.set(func.signatureLine, {
       name: func.name,
       isOneLiner: func.isOneLiner,
+      returnType: func.returnType,
     });
     // Mark body lines (after signature through closing brace) to skip
     for (let l = func.signatureLine + 1; l <= func.closeBraceLine; l++) {
@@ -101,7 +104,11 @@ export function fileStructureOrder(
       } else if (funcInfo.name === "reset") {
         section = S_RESET;
         label = "reset()";
-      } else if (funcInfo.isOneLiner) {
+      } else if (funcInfo.isOneLiner && (funcInfo.returnType !== "void"
+        || /^(?:set_|query_|clear_|reset_|is_|can_)/.test(funcInfo.name))) {
+        // Non-void one-liners are accessors. Void one-liners with
+        // accessor prefixes (set_, query_, etc.) also belong here.
+        // Other void one-liners are action callbacks after create.
         section = S_ONE_LINER;
         label = funcInfo.name + "()";
       } else {

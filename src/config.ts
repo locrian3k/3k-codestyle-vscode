@@ -15,6 +15,16 @@ export interface LintConfig {
   unwrappedString: boolean;
   fileStructureOrder: boolean;
   forwardReference: boolean;
+  defineUppercase: boolean;
+  staticDeprecated: boolean;
+  fileHeaderComment: boolean;
+  filenameConventions: boolean;
+  mixedType: boolean;
+  sprintfPreference: boolean;
+  defineParenthesized: boolean;
+  privateVariables: boolean;
+  floatCriticalData: boolean;
+  bracesAroundMacro: boolean;
 }
 
 export interface Config {
@@ -42,6 +52,16 @@ export function getConfig(): Config {
       unwrappedString: cfg.get<boolean>("lint.unwrappedString", true),
       fileStructureOrder: cfg.get<boolean>("lint.fileStructureOrder", true),
       forwardReference: cfg.get<boolean>("lint.forwardReference", true),
+      defineUppercase: cfg.get<boolean>("lint.defineUppercase", true),
+      staticDeprecated: cfg.get<boolean>("lint.staticDeprecated", true),
+      fileHeaderComment: cfg.get<boolean>("lint.fileHeaderComment", true),
+      filenameConventions: cfg.get<boolean>("lint.filenameConventions", true),
+      mixedType: cfg.get<boolean>("lint.mixedType", true),
+      sprintfPreference: cfg.get<boolean>("lint.sprintfPreference", true),
+      defineParenthesized: cfg.get<boolean>("lint.defineParenthesized", true),
+      privateVariables: cfg.get<boolean>("lint.privateVariables", true),
+      floatCriticalData: cfg.get<boolean>("lint.floatCriticalData", true),
+      bracesAroundMacro: cfg.get<boolean>("lint.bracesAroundMacro", true),
     },
     formatEnable: cfg.get<boolean>("format.enable", true),
   };

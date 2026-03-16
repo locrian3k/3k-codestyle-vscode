@@ -2,7 +2,7 @@
   "name": "3k-codestyle",
   "displayName": "3K Codestyle for LPC",
   "description": "Linter and formatter enforcing 3Kingdoms MUD LPC codestyle conventions",
-  "version": "0.1.18",
+  "version": "0.1.29",
   "publisher": "Mimic",
   "author": {
     "name": "Mimic"
@@ -120,6 +120,56 @@
           "type": "boolean",
           "default": true,
           "description": "Warn when a function is called before it is defined and has no forward prototype declaration."
+        },
+        "3k-codestyle.lint.defineUppercase": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn when #define macro names are not UPPERCASE."
+        },
+        "3k-codestyle.lint.staticDeprecated": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hint that 'static' is deprecated; use 'protected' for functions and 'nosave' for variables."
+        },
+        "3k-codestyle.lint.fileHeaderComment": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hint when .c files don't start with a comment block (filename, author, date)."
+        },
+        "3k-codestyle.lint.filenameConventions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn when filenames contain spaces or uppercase letters."
+        },
+        "3k-codestyle.lint.mixedType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hint when 'mixed' type is used; prefer specific types."
+        },
+        "3k-codestyle.lint.sprintfPreference": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hint to use sprintf() instead of string concatenation (+) in output functions."
+        },
+        "3k-codestyle.lint.defineParenthesized": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hint when #define values with concatenation (+) are not wrapped in parentheses."
+        },
+        "3k-codestyle.lint.privateVariables": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hint when global variables in inheritable files are not declared private."
+        },
+        "3k-codestyle.lint.floatCriticalData": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hint when float is used for critical game data (experience, gold, etc.)."
+        },
+        "3k-codestyle.lint.bracesAroundMacro": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn when UPPERCASE macro calls are used as braceless if/else bodies — prevents dangling else bugs from macro expansion."
         },
         "3k-codestyle.format.enable": {
           "type": "boolean",

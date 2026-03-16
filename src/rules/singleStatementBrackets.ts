@@ -107,6 +107,26 @@ export function singleStatementBrackets(
     }
 
     if (statementCount === 1) {
+      // Don't suggest removing braces when the single statement is an
+      // UPPERCASE macro call — macros can expand to if() statements,
+      // causing dangling else bugs when used without braces.
+      let isMacroCall = false;
+      for (let j = braceLine + 1; j < closeLine; j++) {
+        const jTrimmed = lines[j].text.trim();
+        if (jTrimmed.length === 0 || jTrimmed.startsWith("//")
+          || jTrimmed.startsWith("/*"))
+        {
+          continue;
+        }
+        if (/^[A-Z][A-Z_0-9]+\s*\(/.test(jTrimmed)) {
+          isMacroCall = true;
+        }
+        break;
+      }
+      if (isMacroCall) {
+        continue;
+      }
+
       const keyword = isElse ? "else" : "if";
       diagnostics.push(
         new vscode.Diagnostic(

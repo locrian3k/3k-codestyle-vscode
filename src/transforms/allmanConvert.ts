@@ -108,7 +108,9 @@ export function convertToAllman(text: string): string {
       if (ch === "(") {
         parenDepth++;
         // Check for LPC literal: ({, ([, (:
-        if (next === "{" || next === "[" || next === ":") {
+        // Guard against (:: which is paren + scope-resolution, not (:
+        if (next === "{" || next === "[" ||
+            (next === ":" && (i + 2 >= line.length || line[i + 2] !== ":"))) {
           i++; // skip the literal opener
           continue;
         }

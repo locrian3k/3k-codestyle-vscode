@@ -46,9 +46,15 @@ function collapseConsecutiveCloses(lines: string[]): string[] {
     if (isCloseDominated(trimmed) && result.length > 0 && lastWasClose) {
       const prevLine = result[result.length - 1];
       const prevTrimmed = prevLine.trim();
-      const indent = prevLine.match(/^(\s*)/)?.[1] || "";
-      result[result.length - 1] = indent + prevTrimmed + trimmed;
-      continue;
+      // Don't join if previous line ends with comma — the comma is an
+      // element/argument separator, and the current close terminates the
+      // enclosing container. Joining would obscure this boundary.
+      // e.g. ),\n})); should stay as two lines, not become ),}));
+      if (!prevTrimmed.endsWith(",")) {
+        const indent = prevLine.match(/^(\s*)/)?.[1] || "";
+        result[result.length - 1] = indent + prevTrimmed + trimmed;
+        continue;
+      }
     }
 
     lastWasClose = isCloseDominated(trimmed);
@@ -80,6 +86,15 @@ function collapseTrailingArgs(lines: string[]): string[] {
         const nextTrimmed = lines[j].trim();
         if (nextTrimmed.length === 0) break;
         if (nextTrimmed.length > MAX_ARG_LINE_LENGTH) break;
+
+        // Don't absorb container closes (}) or ]) — they terminate
+        // the enclosing array/mapping, not a trailing argument.
+        if (nextTrimmed.startsWith("})")
+          || nextTrimmed.startsWith("])")) break;
+
+        // Don't absorb lines that open new scopes (unbalanced parens),
+        // e.g. create_verbal( after ),
+        if (hasMoreOpenParens(nextTrimmed)) break;
 
         // Close constructs join directly; other content gets a space
         if (startsWithClose(nextTrimmed)) {
@@ -127,4 +142,28 @@ function isCloseDominated(trimmed: string): boolean {
     return false;
   }
   return startsWithClose(trimmed);
+}
+
+/**
+ * Check if a line has more opening parens than closing parens (ignoring
+ * those inside strings). Indicates the line opens a new scope and should
+ * not be absorbed as a trailing argument.
+ */
+function hasMoreOpenParens(text: string): boolean {
+  let depth = 0;
+  let inStr = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (ch === "\\") { i++; continue; }
+      if (ch === "\"") { inStr = false; }
+      continue;
+    }
+    if (ch === "\"") { inStr = true; continue; }
+    if (ch === "(") { depth++; }
+    if (ch === ")") { depth--; }
+  }
+
+  return depth > 0;
 }

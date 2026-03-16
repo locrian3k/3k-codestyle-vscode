@@ -364,7 +364,8 @@ export class LpcCodeActionProvider implements vscode.CodeActionProvider {
       this.tryBreakAfterAssignment(line, contIndent, maxLen)
       ?? this.tryBreakAfterReturn(line, contIndent, maxLen)
       ?? this.tryBreakAtOperator(line, contIndent, maxLen)
-      ?? this.tryBreakAtComma(line, contIndent, maxLen);
+      ?? this.tryBreakAtComma(line, contIndent, maxLen)
+      ?? this.tryBreakString(line, contIndent, maxLen);
 
     if (!breakResult) {
       return null;
@@ -476,7 +477,12 @@ export class LpcCodeActionProvider implements vscode.CodeActionProvider {
     contIndent: string,
     maxLen: number
   ): BreakResult | null {
-    const candidates = this.findOperatorBreakPoints(line);
+    let candidates = this.findOperatorBreakPoints(line);
+    // If no operators at base depth, try one level deeper (inside a
+    // function call like REPORT("..." + var + "..."))
+    if (candidates.length === 0) {
+      candidates = this.findOperatorBreakPoints(line, 1);
+    }
     if (candidates.length === 0) { return null; }
 
     // Sort by precedence ascending (lowest = best break), then position
@@ -503,13 +509,17 @@ export class LpcCodeActionProvider implements vscode.CodeActionProvider {
    * Determines the "base" paren depth of the expression:
    *   - if/while/for/switch: depth 1 (expression inside parens)
    *   - assignments/return/other: depth 0
-   * Only considers operators at that base depth.
+   * Only considers operators at that base depth (+ depthOffset).
+   *
+   * depthOffset allows searching deeper (e.g., +1 to find operators
+   * inside a function call argument like REPORT("..." + var)).
    *
    * Precedence (lower = break here first):
    *   1: ||  2: &&  3: |  4: ^  5: &  6: +/-  7: * / %
    */
   private findOperatorBreakPoints(
-    line: string
+    line: string,
+    depthOffset: number = 0
   ): { pos: number; precedence: number }[] {
     const candidates: { pos: number; precedence: number }[] = [];
     let inStr = false;
@@ -519,8 +529,8 @@ export class LpcCodeActionProvider implements vscode.CodeActionProvider {
     // Determine base depth: control-flow keywords wrap expression
     // in parens, so operators are at depth 1
     const trimmed = line.trim();
-    const baseDepth = /^(if|else\s+if|while|for|switch)\s*\(/.test(trimmed)
-      ? 1 : 0;
+    const baseDepth = (/^(if|else\s+if|while|for|switch)\s*\(/.test(trimmed)
+      ? 1 : 0) + depthOffset;
 
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
@@ -670,5 +680,116 @@ export class LpcCodeActionProvider implements vscode.CodeActionProvider {
     }
 
     return positions;
+  }
+
+  // --- Strategy 5: Split a long string using juxtaposition ---
+
+  /**
+   * Find the longest string on the line and offer to split it at a word
+   * boundary using LPC string juxtaposition ("first part " "second part").
+   * This is the last resort when no other break strategy works.
+   */
+  private tryBreakString(
+    line: string,
+    contIndent: string,
+    maxLen: number
+  ): BreakResult | null {
+    const strings = this.findStringsOnLine(line);
+    if (strings.length === 0) { return null; }
+
+    // Sort by content length descending — try longest string first
+    strings.sort((a, b) => b.content.length - a.content.length);
+
+    for (const str of strings) {
+      // Only split strings that are reasonably long
+      if (str.content.length < 20) { continue; }
+
+      const beforeStr = line.substring(0, str.start); // text before "
+      const afterStr = line.substring(str.end + 1);   // text after "
+
+      // Max content length for first part
+      const firstMaxContent = maxLen - beforeStr.length - 2; // 2 for quotes
+      // Max content length for second part (must fit suffix)
+      const secondMaxContent = maxLen - contIndent.length - 2
+        - afterStr.trimStart().length;
+
+      if (firstMaxContent < 10 || secondMaxContent < 5) { continue; }
+
+      // Find a split point at a word boundary
+      let splitAt = -1;
+      const target = Math.min(firstMaxContent, str.content.length - 5);
+      for (let i = target; i > 5; i--) {
+        if (str.content[i] === " ") {
+          splitAt = i + 1; // Include the space in the first part
+          break;
+        }
+      }
+
+      if (splitAt <= 0) { continue; }
+
+      // Avoid splitting escape sequences
+      if (str.content[splitAt - 1] === "\\") { splitAt--; }
+      if (splitAt <= 0) { continue; }
+
+      const firstPart = str.content.substring(0, splitAt);
+      const secondPart = str.content.substring(splitAt);
+
+      // Verify second part fits
+      if (secondPart.length > secondMaxContent) { continue; }
+
+      const firstLine = beforeStr + "\"" + firstPart + "\"";
+      const secondLine = contIndent + "\"" + secondPart + "\""
+        + afterStr;
+
+      if (firstLine.length <= maxLen && secondLine.length <= maxLen) {
+        return {
+          label: "Split string across lines",
+          replacement: firstLine + "\n" + secondLine,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Find all string literals on a line, tracking their positions and
+   * content. Respects escape sequences and skips comments.
+   */
+  private findStringsOnLine(
+    line: string
+  ): { start: number; end: number; content: string }[] {
+    const strings: { start: number; end: number; content: string }[] = [];
+    let i = 0;
+
+    while (i < line.length) {
+      if (line[i] === "/" && line[i + 1] === "/") { break; }
+      if (line[i] === "/" && line[i + 1] === "*") { break; }
+      if (line[i] === "'") {
+        const close = line.indexOf("'", i + 1);
+        if (close > i) { i = close + 1; continue; }
+      }
+      if (line[i] === "\"") {
+        const start = i;
+        i++;
+        while (i < line.length) {
+          if (line[i] === "\\") { i += 2; continue; }
+          if (line[i] === "\"") { break; }
+          i++;
+        }
+        if (i < line.length) {
+          strings.push({
+            start,
+            end: i,
+            content: line.substring(start + 1, i),
+          });
+        }
+        i++;
+        continue;
+      }
+      i++;
+    }
+
+    return strings;
   }
 }

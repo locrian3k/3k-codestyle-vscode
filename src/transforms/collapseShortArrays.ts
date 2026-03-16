@@ -246,12 +246,26 @@ function tryCollapse(
     }
   }
 
-  // Collect element lines (between opening and closing)
+  // Collect element lines (between opening and closing).
+  // Lines starting with binary operators (+, ||, &&) are continuations
+  // of the previous expression, not separate array elements.
   const elementLines: string[] = [];
   const firstElemLine = openLine + 1;
   for (let l = firstElemLine; l < closeLine; l++) {
     const trimmed = lines[l].trim();
-    if (trimmed.length > 0) {
+    if (trimmed.length === 0) { continue; }
+    const prevEl = elementLines.length > 0
+      ? elementLines[elementLines.length - 1] : "";
+    if (elementLines.length > 0
+      && (/^[+|&]/.test(trimmed) || /[+|&]\s*$/.test(prevEl)))
+    {
+      // Continuation line — merge with previous element.
+      // Either this line starts with an operator (+, ||, &&)
+      // or the previous line ends with one.
+      elementLines[elementLines.length - 1] += " " + trimmed;
+    }
+    else
+    {
       elementLines.push(trimmed);
     }
   }
@@ -276,6 +290,12 @@ function tryCollapse(
 
   if (elements.length === 0) { return null; }
 
+  // Skip if any element has unbalanced parentheses — this means the
+  // lines are fragments of multi-line function calls nested inside the
+  // array (e.g., create_verbal(, chosen_name,\n "string"...) and should
+  // NOT be treated as separate array elements.
+  if (elements.some(el => !hasBalancedParens(el))) { return null; }
+
   // Build the collapsed line
   const collapsed = prefix + "({" + elements.join(", ") + "})" +
     suffix.trimStart();
@@ -295,6 +315,11 @@ function tryCollapse(
   }
 
   // --- Reflow: group elements onto fewer lines under 80 chars ---
+  // Skip reflow when elements are long expressions (e.g., path concatenations).
+  // If the shortest element is over 20 chars, each one deserves its own line.
+  const minElemLen = Math.min(...elements.map(e => e.length));
+  if (minElemLen > 20) { return null; }
+
   // Determine indent for element lines (base indent + 2)
   const prefixIndent = prefix.match(/^(\s*)/)?.[1] ?? "";
   const elemIndent = prefixIndent + "  ";
@@ -350,4 +375,28 @@ function tryCollapse(
     outputLines,
     replacedLines: linesConsumed,
   };
+}
+
+/**
+ * Check if a string has balanced parentheses (ignoring parens inside
+ * strings). Returns false when the text is a fragment of a multi-line
+ * function call, e.g. "create_verbal(, chosen_name" has depth 1.
+ */
+function hasBalancedParens(text: string): boolean {
+  let depth = 0;
+  let inStr = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (ch === "\\") { i++; continue; }
+      if (ch === "\"") { inStr = false; }
+      continue;
+    }
+    if (ch === "\"") { inStr = true; continue; }
+    if (ch === "(") { depth++; }
+    if (ch === ")") { depth--; }
+  }
+
+  return depth === 0;
 }

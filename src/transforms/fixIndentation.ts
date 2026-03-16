@@ -97,10 +97,14 @@ export function fixIndentation(text: string): string {
 
     // Apply pending body indent from bracketless control flow
     // (if/else/while/for without braces). Reset if line opens a brace.
+    // Comment lines (// ...) receive the indent but don't consume it —
+    // comments aren't statements, so the actual body comes after them.
     let bodyIndent = 0;
     if (pendingBodyIndent > 0) {
       if (trimmed.startsWith("{")) {
         pendingBodyIndent = 0;
+      } else if (trimmed.startsWith("//")) {
+        bodyIndent = pendingBodyIndent;
       } else {
         bodyIndent = pendingBodyIndent;
         pendingBodyIndent = 0;
@@ -164,13 +168,15 @@ export function fixIndentation(text: string): string {
 
     // Detect bracketless control flow headers for next-line body indent.
     // When if/else if/while/for has a complete condition (parenDepth == 0)
-    // and doesn't end with { or ;, the next line is a bracketless body.
+    // and doesn't end with { or ; or }, the next line is a bracketless body.
+    // Lines ending with } are one-liner braced statements (already complete).
     if (!inBlockComment && !inString
         && parenDepth === 0 && literalDepth === 0) {
       const codePart = stripTrailingComment(trimmed).trimEnd();
       const lastChar = codePart.length > 0
         ? codePart[codePart.length - 1] : '';
-      if (lastChar !== '{' && lastChar !== ';' && codePart.length > 0) {
+      if (lastChar !== '{' && lastChar !== ';' && lastChar !== '}'
+          && codePart.length > 0) {
         if (/^(if|else\s+if|while|for)\s*\(/.test(trimmed)) {
           pendingBodyIndent = 1;
         } else if (/^else\b/.test(trimmed)
@@ -245,7 +251,9 @@ export function fixIndentation(text: string): string {
       }
 
       // LPC literal openers: ({ ([ (: — tracked as literal depth
-      if (ch === "(" && (next === "{" || next === "[" || next === ":")) {
+      // Guard against (:: which is paren + scope-resolution, not a closure literal.
+      if (ch === "(" && (next === "{" || next === "[" ||
+          (next === ":" && (i + 2 >= line.length || line[i + 2] !== ":")))) {
         literals++;
         localLitDepth++;
         i++; // skip the {/[/:

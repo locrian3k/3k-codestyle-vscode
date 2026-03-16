@@ -1,5 +1,81 @@
 # Changelog
 
+## 0.1.29 — 2026-03-15
+
+### Linter
+- **`bracesAroundMacro`** (Warning): UPPERCASE macro calls (e.g. `REPORT()`) used as braceless `if`/`else` bodies must be wrapped in braces — macros that expand to `if()` statements cause dangling else bugs without them
+- **`singleStatementBrackets`**: No longer suggests removing braces when the single statement is an UPPERCASE macro call (avoids conflicting with `bracesAroundMacro`)
+- **`fileStructureOrder`**: Void one-liners with accessor prefixes (`set_`, `query_`, `clear_`, `reset_`, `is_`, `can_`) are now correctly classified as one-liner accessors, not action callbacks
+
+### Bug Fixes
+- **`collapseShortArrays`**: Fixed formatter breaking multi-line string concatenation expressions inside array literals — continuation lines starting with `+`, `||`, `&&` (or following a line ending with those operators) are now merged with the previous element instead of being treated as separate array elements
+
+## 0.1.28 — 2026-03-13
+
+### Linter — 9 New Rules from 3K Coding Primer
+- **`defineUppercase`** (Warning): `#define` macro names must be UPPERCASE to distinguish from variables
+- **`staticDeprecated`** (Hint): `static` modifier is deprecated in the new driver — use `protected` for functions, `nosave` for variables
+- **`fileHeaderComment`** (Hint): `.c` files should start with a comment block (filename, author, date, description)
+- **`filenameConventions`** (Warning): Filenames should not contain spaces or uppercase letters
+- **`mixedType`** (Hint): Avoid `mixed` type on functions and variables unless truly necessary
+- **`sprintfPreference`** (Hint): Use `sprintf()`/`printf()` instead of string concatenation (`+`) in output functions
+- **`defineParenthesized`** (Hint): `#define` values using concatenation (`+`) should be wrapped in parentheses
+- **`privateVariables`** (Hint): Global variables in inheritable files (those with `query_`/`set_` accessors) should be `private`
+- **`floatCriticalData`** (Hint): Don't use `float` for critical game data (experience, gold, etc.) — use `int` to prevent precision loss
+
+All 9 rules are individually toggleable via `3k-codestyle.lint.*` settings.
+
+## 0.1.27 — 2026-03-13
+
+### Linter
+- **`superCreate`**: Downgraded missing `::reset()` warning from Warning to Hint — many parent classes don't define `reset()`, and the linter can't trace the inheritance chain to verify; `create()` and `init()` remain Warning severity
+- **`superCreate`**: Hint messages now reference the inherited file(s) — e.g. `reset() should call ::reset() if DROOM defines reset().` so the user knows which parent to check
+
+## 0.1.25 — 2026-03-13
+
+### Bug Fixes
+- **`collapseClosingLines`**: Phase 1 no longer joins consecutive close-dominated lines when the previous line ends with a comma — preserves the visual boundary between array element separators and container closes (e.g. `),` followed by `}));` stays on two lines)
+- **`collapseClosingLines`**: Phase 2 no longer absorbs container closes (`})`, `])`) or lines that open new scopes (unbalanced parens like `create_verbal(`) as trailing arguments
+
+## 0.1.24 — 2026-03-13
+
+### Bug Fixes
+- **`collapseShortArrays`**: Fixed formatter adding commas between juxtaposed strings inside multi-line function calls nested in `({})` arrays — the transform now detects unbalanced parentheses in collected "elements" and skips collapse/reflow for multi-line function call fragments
+- **`wrapLongStrings`**: Fixed off-by-one in `splitStringAtWords` that produced chunks one character too long when a space fell exactly at the max boundary, causing wrapped lines to hit 81 chars instead of 80
+
+### Formatter
+- `wrapLongStrings` now handles strings followed by more arguments (e.g., `create_verbal(, name, "long msg", "write", "yells")`) — previously only split strings where the suffix was just closing parens/semicolons; now appends the suffix to the last juxtaposed chunk line
+
+### Quick Fixes
+- Line-length quick-fix now offers "Split string across lines" as a fallback (Strategy 5) when no other break strategy works — splits the longest string literal at a word boundary using LPC string juxtaposition
+
+## 0.1.23 — 2026-03-12
+
+### Quick Fixes
+- Line-length break suggestion now finds operators inside function call arguments (e.g., `REPORT("..." + var + "...")`) by falling back to depth 1 when no operators exist at the base depth
+
+## 0.1.22 — 2026-03-12
+
+### Formatter
+- `fixIndentation` now correctly handles `//` comments before bracketless control flow bodies — comments receive the body indent without consuming it, so the actual statement after the comment also gets proper indentation
+
+## 0.1.21 — 2026-03-12
+
+### Linter
+- `file-structure-order` no longer suggests moving `void` one-liner functions above `create()` — only non-void accessors (query/set/is functions) belong in the pre-create section; void one-liners like `handle_attack` are action callbacks that belong with other functions
+
+## 0.1.20 — 2026-03-12
+
+### Formatter
+- `collapseShortArrays` now preserves one-element-per-line formatting when elements are long expressions (>20 chars), instead of reflowing them onto fewer lines
+
+## 0.1.19 — 2026-03-12
+
+### Bug Fixes
+- Fixed `fixIndentation` confusing `(::` (paren + scope-resolution) with `(:` (LPC closure literal opener), which caused all lines after `(::function())` calls to be over-indented
+- Applied the same `(::` vs `(:` fix to `lpcParser`, `allmanConvert`, and `splitLongArrays` to prevent similar issues across the formatter and linter
+- Fixed `fixIndentation` bracketless-body detection falsely triggering on one-liner `if` statements ending with `}` (e.g., `if (cond) { stmt; }`), which over-indented the next line
+
 ## 0.1.18 — 2026-03-12
 
 ### Bug Fixes

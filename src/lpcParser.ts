@@ -191,7 +191,8 @@ export function parseDocument(document: vscode.TextDocument): LpcContext {
           i++; // skip the [
           continue;
         }
-        if (next === ":") {
+        // (: is a closure literal, but (:: is paren + scope-resolution
+        if (next === ":" && (i + 2 >= lineText.length || lineText[i + 2] !== ":")) {
           closureDepth++;
           i++; // skip the :
           continue;

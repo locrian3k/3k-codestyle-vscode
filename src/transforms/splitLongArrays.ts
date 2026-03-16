@@ -179,7 +179,9 @@ function parseElements(content: string): string[] {
     }
 
     // Nested literal openers
-    if (ch === "(" && (next === "{" || next === "[" || next === ":")) {
+    // Guard against (:: which is paren + scope-resolution, not (: closure
+    if (ch === "(" && (next === "{" || next === "[" ||
+        (next === ":" && (i + 2 >= content.length || content[i + 2] !== ":")))) {
       litDepth++;
       current += ch + next;
       i++;
