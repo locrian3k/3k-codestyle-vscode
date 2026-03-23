@@ -3,13 +3,16 @@ import { LpcContext } from "../lpcParser";
 import { Config } from "../config";
 
 /**
- * Rule: If a .c file defines create(), init(), or reset(), it should call
- * the parent version (::create(), ::init(), ::reset()) inside it.
+ * Rule: If a .c file defines create() or init(), it should call
+ * the parent version (::create(), ::init()) inside it.
  *
  * Forgetting these calls is a common bug:
  * - Missing ::create() means inherited properties don't initialize
  * - Missing ::init() means inherited actions/commands don't register
- * - Missing ::reset() means inherited reset behavior is skipped
+ *
+ * reset() is intentionally NOT checked — on 3K, the base inherited
+ * classes (/obj/monster, /room/dungeon/dr.c, etc.) don't define reset(),
+ * so ::reset() is a no-op. Flagging it would be noise.
  *
  * Only applies to .c files (not .h headers).
  */
@@ -23,10 +26,6 @@ const LIFECYCLE_FUNCTIONS: {
     severity: vscode.DiagnosticSeverity.Warning },
   { name: "init", reason: "register inherited actions and commands",
     severity: vscode.DiagnosticSeverity.Warning },
-  // reset() is a Hint because many parent classes don't define it —
-  // the linter can't trace the inheritance chain to verify.
-  { name: "reset", reason: "run inherited reset behavior",
-    severity: vscode.DiagnosticSeverity.Hint },
 ];
 
 export function superCreate(
@@ -40,15 +39,6 @@ export function superCreate(
   }
 
   const diagnostics: vscode.Diagnostic[] = [];
-
-  // Extract inherit paths for actionable hint messages
-  const inherits: string[] = [];
-  for (let i = 0; i < document.lineCount; i++) {
-    const match = document.lineAt(i).text.trim().match(/^inherit\s+(.+?)\s*;$/);
-    if (match) {
-      inherits.push(match[1].trim());
-    }
-  }
 
   for (const lf of LIFECYCLE_FUNCTIONS) {
     const func = contexts.functions.find(f => f.name === lf.name);
@@ -68,18 +58,8 @@ export function superCreate(
 
     if (!found) {
       const sigLine = func.signatureLine;
-      let message = lf.name + "() should call ::" + lf.name
+      const message = lf.name + "() should call ::" + lf.name
         + "() to " + lf.reason + ".";
-
-      // For hints, tell the user which parent to check
-      if (lf.severity === vscode.DiagnosticSeverity.Hint
-        && inherits.length > 0)
-      {
-        message = lf.name + "() should call ::" + lf.name
-          + "() if " + inherits.join(", ") + " defines "
-          + lf.name + "().";
-      }
-
       diagnostics.push(
         new vscode.Diagnostic(
           new vscode.Range(sigLine, 0, sigLine, document.lineAt(sigLine).text.length),
