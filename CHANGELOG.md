@@ -4,7 +4,13 @@
 
 ### Linter
 - **`closureQuoteFix`** (Hint): `#'function` closure references leave an unmatched quote that confuses IDE syntax highlighting — suggests adding `//'` comment at end of line
+
+## 0.1.31 — 2026-03-22
+
+### Linter
 - **`superCreate`**: Removed `::reset()` warning entirely — on 3K, no base inherited files define `reset()`, so calling `::reset()` does nothing. `::create()` and `::init()` warnings remain.
+
+## 0.1.30 — 2026-03-16
 
 ### Formatter — Major Refactor
 - **`fixIndentation`**: Rewrote from counter-based to stack-based architecture — every opener pushes a frame with its line indent, every closer pops and aligns with its opener. Eliminates the `countLeadingCloses`/`calcParenContribution` pre-calculation that caused 7+ bugs with combined closing-line patterns (`}));`, `}), 0, ({...}));`, etc.)
