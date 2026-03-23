@@ -42,6 +42,9 @@ export class LpcCodeActionProvider implements vscode.CodeActionProvider {
         case "unwrapped-string":
           actions.push(this.createWordWrapAction(document, diagnostic));
           break;
+        case "closure-quote-fix":
+          actions.push(this.createClosureQuoteAction(document, diagnostic));
+          break;
         case "line-length": {
           const breakAction = this.createLineLengthBreakAction(
             document, diagnostic
@@ -791,5 +794,37 @@ export class LpcCodeActionProvider implements vscode.CodeActionProvider {
     }
 
     return strings;
+  }
+
+  // --- Closure quote fix: add /*'*/ after #'function ---
+
+  private createClosureQuoteAction(
+    document: vscode.TextDocument,
+    diagnostic: vscode.Diagnostic
+  ): vscode.CodeAction {
+    const action = new vscode.CodeAction(
+      "Add /*'*/ to close unmatched quote",
+      vscode.CodeActionKind.QuickFix
+    );
+    action.edit = new vscode.WorkspaceEdit();
+
+    const line = diagnostic.range.start.line;
+    const text = document.lineAt(line).text;
+
+    // Find the last #'identifier on the line and insert /*'*/ after it
+    const match = text.match(/^(.*#'\w+)(.*)/);
+    if (match) {
+      const beforeClosure = match[1];
+      const afterClosure = match[2];
+      action.edit.replace(
+        document.uri,
+        new vscode.Range(line, 0, line, text.length),
+        beforeClosure + "/*'*/" + afterClosure
+      );
+    }
+
+    action.diagnostics = [diagnostic];
+    action.isPreferred = true;
+    return action;
   }
 }
