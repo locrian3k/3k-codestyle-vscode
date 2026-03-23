@@ -174,7 +174,7 @@
         "3k-codestyle.lint.closureQuoteFix": {
           "type": "boolean",
           "default": true,
-          "description": "Hint when #'function closure references lack a //' comment to close the unmatched quote for IDE syntax highlighting."
+          "description": "Hint when #'function closure references lack a /*'*/ comment to close the unmatched quote for IDE syntax highlighting."
         },
         "3k-codestyle.format.enable": {
           "type": "boolean",

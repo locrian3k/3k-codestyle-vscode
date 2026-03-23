@@ -3,14 +3,16 @@ import { LpcContext } from "../lpcParser";
 import { Config } from "../config";
 
 // Rule: LPC closure references (#'function) leave an unmatched quote
-// that confuses most IDEs/syntax highlighters. Adding //' at end of
-// line closes the quote for the IDE without affecting LPC compilation.
+// that confuses most IDEs/syntax highlighters. Adding /*'*/ after the
+// closure closes the quote for the IDE without affecting LPC compilation.
 //
 // Bad (IDE sees open quote):
 //   sort_array(arr, #'sort_alpha);
 //
 // Good (IDE happy):
-//   sort_array(arr, #'sort_alpha); //'
+//   sort_array(arr, #'sort_alpha/*'*/);
+//
+// Also accepts //' as an alternative fix.
 
 const CLOSURE_REF = /#'/;
 
@@ -37,8 +39,8 @@ export function closureQuoteFix(
     diagnostics.push(
       new vscode.Diagnostic(
         new vscode.Range(i, 0, i, text.length),
-        "#' closure leaves unmatched quote — add //' at end of "
-          + "line to fix IDE syntax highlighting.",
+        "#' closure leaves unmatched quote — add /*'*/ after the "
+          + "closure to fix IDE syntax highlighting.",
         vscode.DiagnosticSeverity.Hint
       )
     );
