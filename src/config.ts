@@ -25,6 +25,7 @@ export interface LintConfig {
   privateVariables: boolean;
   floatCriticalData: boolean;
   bracesAroundMacro: boolean;
+  closureQuoteFix: boolean;
 }
 
 export interface Config {
@@ -62,6 +63,7 @@ export function getConfig(): Config {
       privateVariables: cfg.get<boolean>("lint.privateVariables", true),
       floatCriticalData: cfg.get<boolean>("lint.floatCriticalData", true),
       bracesAroundMacro: cfg.get<boolean>("lint.bracesAroundMacro", true),
+      closureQuoteFix: cfg.get<boolean>("lint.closureQuoteFix", true),
     },
     formatEnable: cfg.get<boolean>("format.enable", true),
   };

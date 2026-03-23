@@ -2,7 +2,7 @@
   "name": "3k-codestyle",
   "displayName": "3K Codestyle for LPC",
   "description": "Linter and formatter enforcing 3Kingdoms MUD LPC codestyle conventions",
-  "version": "0.1.31",
+  "version": "0.1.32",
   "publisher": "Mimic",
   "author": {
     "name": "Mimic"
@@ -170,6 +170,11 @@
           "type": "boolean",
           "default": true,
           "description": "Warn when UPPERCASE macro calls are used as braceless if/else bodies — prevents dangling else bugs from macro expansion."
+        },
+        "3k-codestyle.lint.closureQuoteFix": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hint when #'function closure references lack a //' comment to close the unmatched quote for IDE syntax highlighting."
         },
         "3k-codestyle.format.enable": {
           "type": "boolean",

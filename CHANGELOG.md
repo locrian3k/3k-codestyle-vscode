@@ -1,8 +1,9 @@
 # Changelog
 
-## 0.1.31 — 2026-03-22
+## 0.1.32 — 2026-03-22
 
 ### Linter
+- **`closureQuoteFix`** (Hint): `#'function` closure references leave an unmatched quote that confuses IDE syntax highlighting — suggests adding `//'` comment at end of line
 - **`superCreate`**: Removed `::reset()` warning entirely — on 3K, no base inherited files define `reset()`, so calling `::reset()` does nothing. `::create()` and `::init()` warnings remain.
 
 ### Formatter — Major Refactor

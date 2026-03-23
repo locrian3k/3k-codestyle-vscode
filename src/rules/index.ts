@@ -24,6 +24,7 @@ import { defineParenthesized } from "./defineParenthesized";
 import { privateVariables } from "./privateVariables";
 import { floatCriticalData } from "./floatCriticalData";
 import { bracesAroundMacro } from "./bracesAroundMacro";
+import { closureQuoteFix } from "./closureQuoteFix";
 
 export type LintRule = (
   document: vscode.TextDocument,
@@ -61,4 +62,5 @@ export const allRules: RuleEntry[] = [
   { id: "private-variables", settingKey: "privateVariables", rule: privateVariables },
   { id: "float-critical-data", settingKey: "floatCriticalData", rule: floatCriticalData },
   { id: "braces-around-macro", settingKey: "bracesAroundMacro", rule: bracesAroundMacro },
+  { id: "closure-quote-fix", settingKey: "closureQuoteFix", rule: closureQuoteFix },
 ];
