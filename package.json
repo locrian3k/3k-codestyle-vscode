@@ -2,7 +2,7 @@
   "name": "3k-codestyle",
   "displayName": "3K Codestyle for LPC",
   "description": "Linter and formatter enforcing 3Kingdoms MUD LPC codestyle conventions",
-  "version": "0.1.32",
+  "version": "0.1.33",
   "publisher": "Mimic",
   "author": {
     "name": "Mimic"
@@ -104,7 +104,7 @@
         "3k-codestyle.lint.superCreate": {
           "type": "boolean",
           "default": true,
-          "description": "Warn if create(), init(), or reset() do not call their parent (::) version in .c files."
+          "description": "Warn if create() or init() do not call their parent (::) version in .c files."
         },
         "3k-codestyle.lint.unwrappedString": {
           "type": "boolean",

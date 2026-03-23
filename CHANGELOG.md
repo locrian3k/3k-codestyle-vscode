@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.33 — 2026-03-22
+
+### Documentation
+- Updated README/Details page with all 25 lint rules, 8 quick fixes, and 27 settings
+- Fixed `superCreate` description: no longer references `reset()` (removed in v0.1.31)
+- Updated file structure example: `reset()` no longer shows `::reset()` call
+- Updated formatter description to reflect stack-based indentation engine
+
 ## 0.1.32 — 2026-03-22
 
 ### Linter
