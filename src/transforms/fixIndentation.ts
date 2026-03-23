@@ -1,38 +1,343 @@
 /**
- * Re-indent code based on brace, paren, LPC literal, and case depth.
+ * Re-indent LPC code using a stack-based approach.
  *
- * Tracks code-block brace depth for primary indentation, paren depth
- * for continuation lines (e.g., multi-line function call arguments),
- * LPC literal depth for array ({, mapping ([, and closure (: nesting,
- * and case/default labels inside switch statements.
+ * Every syntactic opener ({, (, ({, ([, (:) pushes a frame onto the
+ * stack recording the opener's indent level and the content indent for
+ * lines inside it. Every closer pops the matching frame, and closing
+ * lines align to the opener's indent — no special pre-calculation needed.
  *
- * LPC literals get their own depth counter so items inside ({ }) are
- * indented one level deeper than the ({ itself, and }) aligns with ({.
- * Regular paren nesting contributes +1 per literal context that has
- * open parens (so chained calls like ansi_tell_object(to_ansi(WWRAP(
- * stay flat, but a function call inside a literal gets its own +1).
+ * Paren capping: multiple nested ( in the same context contribute only
+ * +1 total indent, so ansi_tell_object(to_ansi(WWRAP( stays flat.
+ * A new context starts after any literal or brace frame.
  *
- * Detects bracketless control flow (if/else/while/for without braces)
- * and indents the body statement one level deeper.
- *
- * Skips preprocessor directives, respects strings and comments.
+ * Also handles: bracketless control flow bodies (if/else/while/for),
+ * switch/case indentation, block comments, strings, preprocessor
+ * directives, and LPC-specific (:: vs (: distinction.
  */
+
+type FrameKind = "brace" | "array" | "mapping" | "closure" | "paren" | "switch";
+
+interface StackFrame {
+  kind: FrameKind;
+  openerIndent: number;
+  contentIndent: number;
+  contributesIndent: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Stack helpers
+// ---------------------------------------------------------------------------
+
+function getIndent(stack: StackFrame[]): number {
+  return stack.length > 0 ? stack[stack.length - 1].contentIndent : 0;
+}
+
+/**
+ * Push a new frame onto the stack.
+ * @param lineIndent - the computed indent of the LINE containing the opener
+ *   (used for openerIndent so closers align with the line, not the stack)
+ * contentIndent is always based on getIndent(stack) so nesting works correctly.
+ */
+function pushFrame(
+  stack: StackFrame[], kind: FrameKind, lineIndent: number
+): void {
+  const contentBase = getIndent(stack);
+  if (kind === "paren") {
+    // Paren capping: walk top-down to nearest non-paren frame.
+    // If a paren already exists in this context, don't add +1.
+    let hasParenInContext = false;
+    for (let i = stack.length - 1; i >= 0; i--) {
+      if (stack[i].kind === "paren") {
+        hasParenInContext = true;
+        break;
+      }
+      // Non-paren frame = context boundary — stop looking
+      break;
+    }
+    if (hasParenInContext) {
+      stack.push({
+        kind, openerIndent: lineIndent,
+        contentIndent: contentBase, contributesIndent: false,
+      });
+    } else {
+      stack.push({
+        kind, openerIndent: lineIndent,
+        contentIndent: contentBase + 1, contributesIndent: true,
+      });
+    }
+  } else {
+    // When a literal ({, ([, (: immediately follows a function-call paren
+    // on the same line, the paren's +1 and literal's +1 should not stack.
+    // The literal subsumes the paren — items indent one level from the
+    // function call line, not two.
+    // e.g. set_attack_pattern(({ → items at indent 2, not 3
+    let effectiveContent = contentBase + 1;
+    if (isLiteralFrame(kind) && stack.length > 0) {
+      const top = stack[stack.length - 1];
+      if (top.kind === "paren" && top.openerIndent === lineIndent) {
+        effectiveContent = lineIndent + 1;
+      }
+    }
+    stack.push({
+      kind, openerIndent: lineIndent,
+      contentIndent: effectiveContent, contributesIndent: false,
+    });
+  }
+}
+
+function popFrame(
+  stack: StackFrame[], expectedKind: FrameKind
+): StackFrame | null {
+  if (stack.length === 0) return null;
+  const top = stack[stack.length - 1];
+  // For literal closers, accept any literal kind defensively
+  if (expectedKind === "array" || expectedKind === "mapping"
+    || expectedKind === "closure")
+  {
+    if (top.kind === "array" || top.kind === "mapping"
+      || top.kind === "closure")
+    {
+      return stack.pop()!;
+    }
+  }
+  if (expectedKind === "brace" || expectedKind === "switch") {
+    if (top.kind === "brace" || top.kind === "switch") {
+      return stack.pop()!;
+    }
+  }
+  if (top.kind === expectedKind) {
+    return stack.pop()!;
+  }
+  return null;
+}
+
+function isLiteralFrame(kind: FrameKind): boolean {
+  return kind === "array" || kind === "mapping" || kind === "closure";
+}
+
+function countLiteralFrames(stack: StackFrame[]): number {
+  let n = 0;
+  for (const f of stack) {
+    if (isLiteralFrame(f.kind)) n++;
+  }
+  return n;
+}
+
+function hasOpenParensOrLiterals(stack: StackFrame[]): boolean {
+  for (const f of stack) {
+    if (f.kind === "paren" || isLiteralFrame(f.kind)) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Determine line indent from leading close tokens (read-only peek)
+// ---------------------------------------------------------------------------
+
+/**
+ * Peek at leading close tokens in trimmed line to determine what indent
+ * level this line should have. Does NOT modify the stack — just reads it.
+ *
+ * Uses firstIndent (innermost closer's opener) when more content follows
+ * the closes (e.g., }), 0, ({...})); aligns with the inner ({).
+ * Uses lastIndent (outermost closer's opener) when the line is ONLY
+ * closes and semicolons (e.g., })); aligns with the function call, not ({).
+ */
+function peekLineIndent(
+  trimmed: string, stack: StackFrame[]
+): { indent: number; isCloseLeading: boolean } {
+  // Check if line starts with code brace close (not LPC literal)
+  if (trimmed.startsWith("}") && !trimmed.startsWith("})")) {
+    if (stack.length > 0) {
+      const top = stack[stack.length - 1];
+      if (top.kind === "brace" || top.kind === "switch") {
+        return { indent: top.openerIndent, isCloseLeading: true };
+      }
+    }
+    return { indent: Math.max(0, getIndent(stack) - 1), isCloseLeading: true };
+  }
+
+  // Check for LPC literal closes and paren closes
+  let i = 0;
+  let stackIdx = stack.length - 1;
+  let firstIndent = -1;
+  let lastIndent = -1;
+  let foundAny = false;
+
+  while (i < trimmed.length) {
+    // LPC literal closers: }) ]) :)
+    if (i + 1 < trimmed.length) {
+      const pair = trimmed[i] + trimmed[i + 1];
+      const isLitClose = pair === "})" || pair === "])" || pair === ":)";
+      if (isLitClose) {
+        // Find matching literal frame on stack
+        while (stackIdx >= 0 && !isLiteralFrame(stack[stackIdx].kind)) {
+          stackIdx--;
+        }
+        if (stackIdx >= 0) {
+          if (firstIndent < 0) firstIndent = stack[stackIdx].openerIndent;
+          lastIndent = stack[stackIdx].openerIndent;
+          stackIdx--;
+        }
+        foundAny = true;
+        i += 2;
+        continue;
+      }
+    }
+    // Regular close paren
+    if (trimmed[i] === ")") {
+      // Find matching paren frame
+      while (stackIdx >= 0 && stack[stackIdx].kind !== "paren") {
+        stackIdx--;
+      }
+      if (stackIdx >= 0) {
+        if (firstIndent < 0) firstIndent = stack[stackIdx].openerIndent;
+        lastIndent = stack[stackIdx].openerIndent;
+        stackIdx--;
+      }
+      foundAny = true;
+      i++;
+      continue;
+    }
+    // Skip whitespace, semicolons, commas
+    if (trimmed[i] === " " || trimmed[i] === "\t"
+      || trimmed[i] === ";" || trimmed[i] === ",")
+    {
+      i++;
+      continue;
+    }
+    break;
+  }
+
+  if (foundAny && firstIndent >= 0) {
+    // Check if remaining content after closes is only whitespace/semicolons.
+    // If so, line fully terminates the expression → align with outermost
+    // opener (lastIndent). Otherwise, more content follows → align with
+    // innermost opener (firstIndent).
+    let onlyTerminators = true;
+    for (let j = i; j < trimmed.length; j++) {
+      const c = trimmed[j];
+      if (c !== " " && c !== "\t" && c !== ";") {
+        onlyTerminators = false;
+        break;
+      }
+    }
+    const indent = onlyTerminators ? lastIndent : firstIndent;
+    return { indent, isCloseLeading: true };
+  }
+  return { indent: getIndent(stack), isCloseLeading: false };
+}
+
+// ---------------------------------------------------------------------------
+// Full-line scanner — processes all opens/closes and updates stack
+// ---------------------------------------------------------------------------
+
+function scanFullLine(
+  line: string, stack: StackFrame[], switchPending: boolean,
+  lineIndent: number
+): boolean {
+  let localInString = false;
+  let localInComment = false;
+  let litCount = countLiteralFrames(stack);
+  let foundBrace = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    const next = i + 1 < line.length ? line[i + 1] : "";
+
+    if (localInComment) {
+      if (ch === "*" && next === "/") { localInComment = false; i++; }
+      continue;
+    }
+    if (localInString) {
+      if (ch === "\\") { i++; continue; }
+      if (ch === "\"") { localInString = false; }
+      continue;
+    }
+    if (ch === "/" && next === "*") { localInComment = true; i++; continue; }
+    if (ch === "/" && next === "/") { break; }
+    if (ch === "\"") { localInString = true; continue; }
+    if (ch === "'") {
+      const close = line.indexOf("'", i + 1);
+      if (close > i) { i = close; }
+      continue;
+    }
+
+    // LPC literal openers: ({ ([ (:
+    // Guard: (:: is paren + scope-resolution, not closure literal.
+    if (ch === "(" && (next === "{" || next === "["
+      || (next === ":" && (i + 2 >= line.length || line[i + 2] !== ":"))))
+    {
+      const kind: FrameKind = next === "{"
+        ? "array" : next === "[" ? "mapping" : "closure";
+      pushFrame(stack, kind, lineIndent);
+      litCount++;
+      i++; // skip the {/[/:
+      continue;
+    }
+
+    // LPC literal closers: }) ]) :) — only when inside a literal
+    if (litCount > 0
+      && (ch === "}" || ch === "]" || ch === ":")
+      && next === ")")
+    {
+      const kind: FrameKind = ch === "}"
+        ? "array" : ch === "]" ? "mapping" : "closure";
+      const frame = popFrame(stack, kind);
+      if (frame) litCount--;
+      i++; // skip the )
+      continue;
+    }
+
+    // Code braces
+    if (ch === "{") {
+      if (switchPending) {
+        stack.push({
+          kind: "switch",
+          openerIndent: lineIndent,
+          contentIndent: getIndent(stack) + 1,
+          contributesIndent: false,
+        });
+        switchPending = false;
+      } else {
+        pushFrame(stack, "brace", lineIndent);
+      }
+      foundBrace = true;
+      continue;
+    }
+    if (ch === "}") {
+      popFrame(stack, "brace");
+      continue;
+    }
+
+    // Regular parens
+    if (ch === "(") {
+      pushFrame(stack, "paren", lineIndent);
+      continue;
+    }
+    if (ch === ")") {
+      popFrame(stack, "paren");
+      continue;
+    }
+  }
+
+  return foundBrace;
+}
+
+// ---------------------------------------------------------------------------
+// Main entry point
+// ---------------------------------------------------------------------------
+
 export function fixIndentation(text: string): string {
   const lines = text.split("\n");
   const result: string[] = [];
 
-  let depth = 0;
-  let parenDepth = 0;
-  let literalDepth = 0;
-  // Stack of parenDepth at each literal entry, for per-context paren indent
-  const parenAtLiteralEntry: number[] = [];
+  const stack: StackFrame[] = [];
   let pendingBodyIndent = 0;
   let inBlockComment = false;
   let inString = false;
-  // Track whether we're inside a case body (for +1 indent after case label)
   let inCaseBody = false;
-  // Track switch brace depth so we know when a } exits a switch
-  const switchBraceDepths: number[] = [];
+  let switchPending = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -51,54 +356,43 @@ export function fixIndentation(text: string): string {
       continue;
     }
 
-    // If we're in a block comment, preserve content exactly as-is.
-    // Only adjust leading indentation to match current depth.
-    // Do NOT add or remove * characters — commented-out code should stay clean.
+    // Block comments: adjust leading indent to match brace depth
     if (inBlockComment) {
-      result.push("  ".repeat(depth) + trimmed);
+      let braceDepth = 0;
+      for (const f of stack) {
+        if (f.kind === "brace" || f.kind === "switch") braceDepth++;
+      }
+      result.push("  ".repeat(braceDepth) + trimmed);
       updateState(line);
       continue;
     }
 
-    // Check if } at start is a code brace close (not LPC literal like }))
-    const startsWithCodeBraceClose = trimmed.startsWith("}")
-      && !trimmed.startsWith("})");
+    // ---------------------------------------------------------------
+    // Compute indent for this line (read-only peek at stack)
+    // ---------------------------------------------------------------
 
-    // If line starts with a code-block closing brace, reduce depth first
-    if (startsWithCodeBraceClose && depth > 0) {
-      // If this } closes a switch, clear case body state
-      if (switchBraceDepths.length > 0
-          && switchBraceDepths[switchBraceDepths.length - 1] === depth - 1) {
-        switchBraceDepths.pop();
+    const peek = peekLineIndent(trimmed, stack);
+    let baseIndent = peek.indent;
+
+    // If closing a switch brace, clear case body state before indent calc
+    if (peek.isCloseLeading && trimmed.startsWith("}")
+      && !trimmed.startsWith("})") && inCaseBody)
+    {
+      if (stack.length > 0 && stack[stack.length - 1].kind === "switch") {
         inCaseBody = false;
       }
-      depth--;
     }
 
-    // Detect case/default labels — they go at the same depth as the switch body
-    // (one level inside the switch braces), NOT deeper
-    const isCaseLabel = !inString && !inBlockComment && isCaseLine(trimmed);
+    // case/default label handling — drop back from case body indent
+    const isCaseLabel_ = !inString && !inBlockComment && isCaseLine(trimmed);
     const isDefaultLabel = !inString && !inBlockComment
       && /^default\s*:/.test(trimmed);
 
-    // If this is a case/default label and we were in a case body, drop back
-    if ((isCaseLabel || isDefaultLabel) && inCaseBody) {
+    if ((isCaseLabel_ || isDefaultLabel) && inCaseBody) {
       inCaseBody = false;
     }
 
-    // Count leading closes (LPC literals and regular parens) for indent
-    const closes = countLeadingCloses(trimmed);
-    const effectiveLitDepth = Math.max(0, literalDepth - closes.literals);
-    const hasLeadingRegularClose = closes.regulars > 0;
-    const parenComponent = calcParenContribution(
-      parenDepth, parenAtLiteralEntry, hasLeadingRegularClose
-    );
-    const parenIndent = parenComponent + effectiveLitDepth;
-
-    // Apply pending body indent from bracketless control flow
-    // (if/else/while/for without braces). Reset if line opens a brace.
-    // Comment lines (// ...) receive the indent but don't consume it —
-    // comments aren't statements, so the actual body comes after them.
+    // Bracketless control flow body indent
     let bodyIndent = 0;
     if (pendingBodyIndent > 0) {
       if (trimmed.startsWith("{")) {
@@ -111,76 +405,65 @@ export function fixIndentation(text: string): string {
       }
     }
 
-    // Calculate total indentation
+    // Total indent
     const caseIndent = inCaseBody ? 1 : 0;
-    const totalDepth = depth + parenIndent + caseIndent + bodyIndent;
-    const indented = "  ".repeat(totalDepth) + trimmed;
-    result.push(indented);
+    const totalIndent = baseIndent + caseIndent + bodyIndent;
+    result.push("  ".repeat(totalIndent) + trimmed);
 
-    // After outputting a case/default label line, enter case body mode
-    // (unless it's a one-liner like "case 0: return;")
-    if ((isCaseLabel || isDefaultLabel) && !inCaseBody) {
-      // Check if the case has a statement on the same line after the label
+    // ---------------------------------------------------------------
+    // Post-output: case body entry
+    // ---------------------------------------------------------------
+
+    if ((isCaseLabel_ || isDefaultLabel) && !inCaseBody) {
       const afterLabel = trimmed.replace(/^(case\s+.*?|default)\s*:\s*/, "");
       if (afterLabel.length === 0 || afterLabel === "{") {
-        // No inline statement — next lines are case body
         inCaseBody = true;
       }
-      // If there IS an inline statement (like "case 0: return;"), don't enter case body
     }
 
-    // Detect switch statement — next { opens a switch block
+    // ---------------------------------------------------------------
+    // Post-output: detect switch for next brace
+    // ---------------------------------------------------------------
+
     if (/^switch\s*\(/.test(trimmed) || trimmed === "switch") {
-      // The opening { will be on this line or next; record the depth
-      // when we see the { for the switch
-      switchBraceDepths.push(depth);
+      switchPending = true;
     }
 
-    // Count net depth changes on this line (excluding LPC literals and strings)
-    const changes = countDepthChanges(line, literalDepth);
+    // ---------------------------------------------------------------
+    // Scan full line to update stack state for next line
+    // ---------------------------------------------------------------
 
-    // Handle brace depth
-    if (startsWithCodeBraceClose) {
-      depth += changes.braces + 1; // +1 to compensate for the close we already handled
-    } else {
-      depth += changes.braces;
-    }
-    if (depth < 0) {
-      depth = 0;
-    }
-
-    // Handle paren and literal depth
-    const newParenDepth = Math.max(0, parenDepth + changes.parens);
-
-    // Update literal entry stack: record parenDepth when entering literals
-    if (changes.literals > 0) {
-      for (let i = 0; i < changes.literals; i++) {
-        parenAtLiteralEntry.push(newParenDepth);
-      }
-    } else if (changes.literals < 0) {
-      for (let i = 0; i < -changes.literals; i++) {
-        if (parenAtLiteralEntry.length > 0) parenAtLiteralEntry.pop();
+    // If closing a switch brace, clear case body state
+    if (peek.isCloseLeading && trimmed.startsWith("}")
+      && !trimmed.startsWith("})"))
+    {
+      if (stack.length > 0) {
+        const top = stack[stack.length - 1];
+        if (top.kind === "switch") {
+          inCaseBody = false;
+        }
       }
     }
 
-    parenDepth = newParenDepth;
-    literalDepth = Math.max(0, literalDepth + changes.literals);
+    const foundBrace = scanFullLine(line, stack, switchPending, totalIndent);
+    if (foundBrace) switchPending = false;
 
-    // Detect bracketless control flow headers for next-line body indent.
-    // When if/else if/while/for has a complete condition (parenDepth == 0)
-    // and doesn't end with { or ; or }, the next line is a bracketless body.
-    // Lines ending with } are one-liner braced statements (already complete).
-    if (!inBlockComment && !inString
-        && parenDepth === 0 && literalDepth === 0) {
+    // ---------------------------------------------------------------
+    // Detect bracketless control flow for next line
+    // ---------------------------------------------------------------
+
+    if (!inBlockComment && !inString && !hasOpenParensOrLiterals(stack)) {
       const codePart = stripTrailingComment(trimmed).trimEnd();
       const lastChar = codePart.length > 0
         ? codePart[codePart.length - 1] : '';
       if (lastChar !== '{' && lastChar !== ';' && lastChar !== '}'
-          && codePart.length > 0) {
+        && codePart.length > 0)
+      {
         if (/^(if|else\s+if|while|for)\s*\(/.test(trimmed)) {
           pendingBodyIndent = 1;
         } else if (/^else\b/.test(trimmed)
-                   && !/^else\s+if\b/.test(trimmed)) {
+          && !/^else\s+if\b/.test(trimmed))
+        {
           pendingBodyIndent = 1;
         }
       }
@@ -213,154 +496,12 @@ export function fixIndentation(text: string): string {
       if (ch === "\"") { inString = true; continue; }
     }
   }
-
-  function countDepthChanges(
-    line: string,
-    currentLiteralDepth: number
-  ): { braces: number; parens: number; literals: number } {
-    let braces = 0;
-    let parens = 0;
-    let literals = 0;
-    // Track local literal depth so we only recognize }) ]) :) as literal
-    // closers when we're actually inside a literal. Without this, patterns
-    // like array[i]) are misidentified as ]) literal closers.
-    let localLitDepth = currentLiteralDepth;
-    let localInString = false;
-    let localInComment = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      const next = i + 1 < line.length ? line[i + 1] : "";
-
-      if (localInComment) {
-        if (ch === "*" && next === "/") { localInComment = false; i++; }
-        continue;
-      }
-      if (localInString) {
-        if (ch === "\\") { i++; continue; }
-        if (ch === "\"") { localInString = false; }
-        continue;
-      }
-      if (ch === "/" && next === "*") { localInComment = true; i++; continue; }
-      if (ch === "/" && next === "/") { break; }
-      if (ch === "\"") { localInString = true; continue; }
-      if (ch === "'") {
-        const close = line.indexOf("'", i + 1);
-        if (close > i) { i = close; }
-        continue;
-      }
-
-      // LPC literal openers: ({ ([ (: — tracked as literal depth
-      // Guard against (:: which is paren + scope-resolution, not a closure literal.
-      if (ch === "(" && (next === "{" || next === "[" ||
-          (next === ":" && (i + 2 >= line.length || line[i + 2] !== ":")))) {
-        literals++;
-        localLitDepth++;
-        i++; // skip the {/[/:
-        continue;
-      }
-      // LPC literal closers: }) ]) :) — only when inside a literal.
-      // Without the depth check, array[i]) would be misread as ]).
-      if (localLitDepth > 0
-          && (ch === "}" || ch === "]" || ch === ":")
-          && next === ")") {
-        literals--;
-        localLitDepth--;
-        i++; // skip the )
-        continue;
-      }
-
-      if (ch === "{") { braces++; }
-      if (ch === "}") { braces--; }
-      if (ch === "(") { parens++; }
-      if (ch === ")") { parens--; }
-    }
-
-    return { braces, parens, literals };
-  }
 }
 
-/**
- * Calculate paren contribution to indentation, accounting for literal
- * boundaries. Each "context" (base level, and each literal nesting level)
- * contributes at most +1 if it has open parens. This prevents
- * over-indentation for deeply nested function calls (like
- * ansi_tell_object(to_ansi(WWRAP(...)))) while correctly indenting
- * function calls inside LPC literals.
- *
- * When skipInnermost is true (leading close paren), the innermost
- * context's parens are not counted, aligning the close with its opener.
- */
-function calcParenContribution(
-  parenDepth: number,
-  parenAtLiteralEntry: number[],
-  skipInnermost: boolean
-): number {
-  if (parenDepth === 0) return 0;
+// ---------------------------------------------------------------------------
+// Utility functions
+// ---------------------------------------------------------------------------
 
-  let contribution = 0;
-  let prevBoundary = 0;
-
-  for (let i = 0; i < parenAtLiteralEntry.length; i++) {
-    const parensAtLevel = parenAtLiteralEntry[i] - prevBoundary;
-    if (parensAtLevel > 0) contribution++;
-    prevBoundary = parenAtLiteralEntry[i];
-  }
-
-  if (!skipInnermost) {
-    const parensInCurrent = parenDepth - prevBoundary;
-    if (parensInCurrent > 0) contribution++;
-  }
-
-  return contribution;
-}
-
-/**
- * Count leading paren-level closes at the start of a trimmed line.
- * Returns separate counts for LPC literal closes (}), ]), :)) and
- * regular paren closes ()). Skips whitespace, semicolons, and commas
- * between close constructs.
- */
-function countLeadingCloses(
-  trimmed: string
-): { literals: number; regulars: number } {
-  let literals = 0;
-  let regulars = 0;
-  let i = 0;
-
-  while (i < trimmed.length) {
-    // LPC literal closers: }) ]) :)
-    if (i + 1 < trimmed.length) {
-      const pair = trimmed[i] + trimmed[i + 1];
-      if (pair === "})" || pair === "])" || pair === ":)") {
-        literals++;
-        i += 2;
-        continue;
-      }
-    }
-    // Regular close paren
-    if (trimmed[i] === ")") {
-      regulars++;
-      i++;
-      continue;
-    }
-    // Skip whitespace, semicolons, and commas between closes
-    if (trimmed[i] === " " || trimmed[i] === "\t"
-        || trimmed[i] === ";" || trimmed[i] === ",") {
-      i++;
-      continue;
-    }
-    // Stop at first non-close character
-    break;
-  }
-
-  return { literals, regulars };
-}
-
-/**
- * Strip a trailing // comment from a line, respecting strings.
- * Returns everything before the comment (or the full line if none).
- */
 function stripTrailingComment(line: string): string {
   let inStr = false;
   for (let i = 0; i < line.length; i++) {
@@ -377,11 +518,6 @@ function stripTrailingComment(line: string): string {
   return line;
 }
 
-/**
- * Detect if a trimmed line is a case label.
- * Matches: case 0:, case 1..24:, case "foo":, etc.
- * Must not confuse with "default:" or code containing "case" as a substring.
- */
 function isCaseLine(trimmed: string): boolean {
   return /^case\s+.+:/.test(trimmed);
 }

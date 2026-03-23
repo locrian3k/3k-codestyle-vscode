@@ -50,9 +50,14 @@ function collapseConsecutiveCloses(lines: string[]): string[] {
       // element/argument separator, and the current close terminates the
       // enclosing container. Joining would obscure this boundary.
       // e.g. ),\n})); should stay as two lines, not become ),}));
-      if (!prevTrimmed.endsWith(",")) {
-        const indent = prevLine.match(/^(\s*)/)?.[1] || "";
-        result[result.length - 1] = indent + prevTrimmed + trimmed;
+      //
+      // Don't join if the lines have different indent levels — they
+      // represent different nesting depths and should stay separate.
+      // e.g. })  at indent 2 and  );  at indent 1 should not become }));
+      const prevIndent = prevLine.match(/^(\s*)/)?.[1] || "";
+      const currIndent = lines[i].match(/^(\s*)/)?.[1] || "";
+      if (!prevTrimmed.endsWith(",") && prevIndent === currIndent) {
+        result[result.length - 1] = prevIndent + prevTrimmed + trimmed;
         continue;
       }
     }
