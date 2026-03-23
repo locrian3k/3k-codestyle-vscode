@@ -1,10 +1,14 @@
 # Changelog
 
-## 0.1.30 — 2026-03-16
+## 0.1.31 — 2026-03-22
+
+### Linter
+- **`superCreate`**: Removed `::reset()` warning entirely — on 3K, no base inherited files define `reset()`, so calling `::reset()` does nothing. `::create()` and `::init()` warnings remain.
 
 ### Formatter — Major Refactor
 - **`fixIndentation`**: Rewrote from counter-based to stack-based architecture — every opener pushes a frame with its line indent, every closer pops and aligns with its opener. Eliminates the `countLeadingCloses`/`calcParenContribution` pre-calculation that caused 7+ bugs with combined closing-line patterns (`}));`, `}), 0, ({...}));`, etc.)
 - Paren capping (multiple `(` in same context = +1 total indent) now emerges structurally from the stack instead of arithmetic calculation
+- Same-line literal subsumption: `set_attack_pattern(({` items indent +1 from the call, not +2
 - All existing edge cases preserved: `(::` vs `(:` distinction, `array[i])` guard, bracketless control flow, switch/case, block comments
 
 ## 0.1.29 — 2026-03-15
