@@ -13,7 +13,7 @@ All rules run in real-time on file open, save, and as-you-type (300ms debounce).
 | Rule | Severity | Description |
 |------|----------|-------------|
 | `pragma-strong-types` | Error | Require `#pragma strong_types` as the first non-comment line of `.c` files |
-| `include-defs-h` | Warning | Require `#include "defs.h"` in every `.c` file (skips all `.h` headers) |
+| `include-defs-h` | Warning | Require at least one local `#include "..."` in every `.c` file (defs.h or an intermediate header that pulls in the chain). Skips all `.h` headers. |
 | `no-tabs` | Warning | Flag tab characters outside strings/comments (spaces only) |
 | `indentation` | Warning | Require 2-space indentation multiples |
 | `line-length` | Warning | Warn on lines exceeding 80 characters (configurable) |
@@ -89,7 +89,7 @@ All settings are under the `3k-codestyle` prefix. Access via `File > Preferences
 |---------|------|---------|-------------|
 | `enable` | boolean | `true` | Master enable/disable for linter and formatter |
 | `lint.pragmaStrongTypes` | boolean | `true` | Require `#pragma strong_types` |
-| `lint.includeDefsH` | boolean | `true` | Require `#include "defs.h"` in `.c` files |
+| `lint.includeDefsH` | boolean | `true` | Require a local `#include` in `.c` files (defs.h or intermediate header) |
 | `lint.noTabs` | boolean | `true` | Flag tab characters |
 | `lint.indentation` | boolean | `true` | Require 2-space indentation |
 | `lint.lineLength` | boolean | `true` | Warn on long lines |

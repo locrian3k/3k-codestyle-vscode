@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.35 — 2026-03-22
+
+### Linter
+- **`includeDefsH`**: Now accepts any local `#include "..."` as satisfying the linked header chain, not just the literal `defs.h`. Files that include intermediate headers (e.g., `power_inc.h`) which themselves pull in `defs.h` no longer trigger a false warning.
+
 ## 0.1.34 — 2026-03-22
 
 ### Linter

@@ -2,7 +2,7 @@
   "name": "3k-codestyle",
   "displayName": "3K Codestyle for LPC",
   "description": "Linter and formatter enforcing 3Kingdoms MUD LPC codestyle conventions",
-  "version": "0.1.34",
+  "version": "0.1.35",
   "publisher": "Mimic",
   "author": {
     "name": "Mimic"
@@ -59,7 +59,7 @@
         "3k-codestyle.lint.includeDefsH": {
           "type": "boolean",
           "default": true,
-          "description": "Require #include \"defs.h\" (or variant) in every .c file. Skips .h headers."
+          "description": "Require a local #include in every .c file — defs.h or an intermediate header that pulls in the chain. Skips .h headers."
         },
         "3k-codestyle.lint.noTabs": {
           "type": "boolean",
