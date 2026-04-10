@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.34 — 2026-03-22
+
+### Linter
+- **`includeDefsH`**: Now skips all `.h` files, not just `defs.h`. Header files are inheritable partials meant to be included by `.c` files that already have the defs chain pulled in — requiring them to re-include `defs.h` is redundant.
+
 ## 0.1.33 — 2026-03-22
 
 ### Documentation
