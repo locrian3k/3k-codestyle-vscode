@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.36 — 2026-03-22
+
+### Syntax Highlighting
+- **`inherit` rule**: Fixed mis-rendering where the entire `inherit "/path/to/file"` line was painted with the keyword color instead of just the `inherit` keyword. The path now correctly renders as a string. The grammar previously assigned the keyword scope to capture 0 (the whole match), which won theme arbitration over the string scope layered onto capture 1. Now `inherit` and the path each have their own capture group.
+- **`#include` and `#define` rules**: Applied the same fix for consistency — the directive keyword and its argument (path/macro name) now have separate capture groups so the argument's scope (string for include paths, entity.name.constant for macro names) renders independently.
+
 ## 0.1.35 — 2026-03-22
 
 ### Linter
